@@ -15,6 +15,9 @@ using Bot.Modules.Actions;
 using Bot.Modules.Actions.Attributes;
 using Bot.Modules.Contexts;
 using Bot.Processing;
+using Bot.Models;
+using System.Collections.Concurrent;
+using Bot.Modules;
 
 namespace Bot.Services
 {
@@ -238,6 +241,28 @@ namespace Bot.Services
             }
 
             return option;
+        }
+
+        private readonly ConcurrentDictionary<ulong, CollectorLogic> _inProgressCollectors = new();
+
+        public void RegisterCollector(CollectorLogic collector) => _inProgressCollectors.GetOrAdd(collector.MessageId, collector);
+        public void UnregisterCollector(CollectorLogic collector) => _inProgressCollectors.Remove(collector.MessageId, out _);
+
+        public bool CollectorAvailable(ulong messageId)
+        {
+            return _inProgressCollectors.TryGetValue(messageId, out _);
+        }
+
+        public async Task<(bool Success, MessageBuilder MessageBuilder)> FireCollectorAsync(IUser userData, ulong messageId, object[] idParams, object[] selectParams)
+        {
+            _inProgressCollectors.TryGetValue(messageId, out CollectorLogic collector);
+            if (collector == null || collector.Execute == null)
+                return (false, new MessageBuilder(userData, "I couldn't find that action anymore. Maybe you were too late?", false, null));
+            if (collector.OnlyOriginalUserAllowed && collector.OriginalUserId != userData.Id)
+                return (false, new MessageBuilder(userData, "Sorry, for this message, only the calling user gets to pick!", false, null));
+
+            var builder = await collector.Execute(userData, messageId, idParams, selectParams);
+            return (true, builder);
         }
 
         /*

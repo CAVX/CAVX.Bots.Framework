@@ -12,10 +12,17 @@ using Bot.Utilities;
 
 namespace Bot.Modules.Contexts
 {
+    public enum RequestAcknowledgeStatus
+    {
+        NotAcknowledged,
+        Acknowledged,
+        AcknowledgeFailed
+    }
+
     public class RequestInteractionContext : RequestContext
     {
         readonly SemaphoreLocker _acknowledgedLock = new();
-        bool _hasbeenAcknowledged = false;
+        RequestAcknowledgeStatus _acknowledgeStatus = RequestAcknowledgeStatus.NotAcknowledged;
 
         public RequestInteractionContext(SocketInteraction interaction, DiscordSocketClient client)
         {
@@ -25,23 +32,26 @@ namespace Bot.Modules.Contexts
 
         public SocketInteraction OriginalInteraction { get; }
 
-        public async Task<bool> HadBeenAcknowledgedAsync(bool setIfFalse = false, Func<Task> performIfFalse = null)
+        public async Task<RequestAcknowledgeStatus> HadBeenAcknowledgedAsync(RequestAcknowledgeStatus? setIfNotAcknowledged = null, Func<Task> performIfNotAcknowledged = null)
         {
             return await _acknowledgedLock.LockAsync(async () =>
             {
-                bool wasAcknowledged = _hasbeenAcknowledged;
-                if (!wasAcknowledged && setIfFalse)
-                    _hasbeenAcknowledged = true;
-                if (!wasAcknowledged && performIfFalse != null)
+                var previousStatus = _acknowledgeStatus;
+                if (previousStatus == RequestAcknowledgeStatus.NotAcknowledged && setIfNotAcknowledged.HasValue)
+                    _acknowledgeStatus = setIfNotAcknowledged.Value;
+                if (previousStatus == RequestAcknowledgeStatus.NotAcknowledged && performIfNotAcknowledged != null)
                 {
                     try
                     {
-                        await performIfFalse();
+                        await performIfNotAcknowledged();
                     }
-                    catch { }
+                    catch (HttpException)
+                    {
+                        _acknowledgeStatus = RequestAcknowledgeStatus.AcknowledgeFailed;
+                    }
                 }
 
-                return wasAcknowledged;
+                return previousStatus;
             });
         }
 
@@ -68,14 +78,14 @@ namespace Bot.Modules.Contexts
             return await _acknowledgedLock.LockAsync(async () =>
             {
                 bool initial = await GetInitialAsync(true);
-                bool wasAcknowledged = _hasbeenAcknowledged;
+                var previousStatus = _acknowledgeStatus;
 
                 try
                 {
-                    if (initial && !wasAcknowledged)
+                    if (initial && previousStatus == RequestAcknowledgeStatus.NotAcknowledged)
                     {
                         await OriginalInteraction.RespondAsync(message, embeds, isTTS, ephemeralRule.ToEphemeral(), allowedMentions, options, components, embed);
-                        _hasbeenAcknowledged = true;
+                        _acknowledgeStatus = RequestAcknowledgeStatus.Acknowledged;
                         try
                         {
                             return await OriginalInteraction.GetOriginalResponseAsync();
@@ -132,6 +142,7 @@ namespace Bot.Modules.Contexts
                 }
                 catch (HttpException e)
                 {
+                    _acknowledgeStatus = RequestAcknowledgeStatus.AcknowledgeFailed;
                     Console.WriteLine(e.ToString());
 
                     if (initial && OriginalInteraction is SocketSlashCommand)
@@ -157,10 +168,17 @@ namespace Bot.Modules.Contexts
 
                 await _acknowledgedLock.LockAsync(async () =>
                 {
-                    if (initial && !_hasbeenAcknowledged)
+                    if (initial && _acknowledgeStatus == RequestAcknowledgeStatus.NotAcknowledged)
                     {
-                        await OriginalInteraction.DeferAsync(ephemeralRule.ToEphemeral());
-                        _hasbeenAcknowledged = true;
+                        try
+                        {
+                            await OriginalInteraction.DeferAsync(ephemeralRule.ToEphemeral());
+                            _acknowledgeStatus = RequestAcknowledgeStatus.Acknowledged;
+                        }
+                        catch (HttpException)
+                        {
+                            _acknowledgeStatus = RequestAcknowledgeStatus.AcknowledgeFailed;
+                        }
                     }
                 });
 
@@ -181,52 +199,56 @@ namespace Bot.Modules.Contexts
 
         public override async Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null)
         {
-            try
+            await _acknowledgedLock.LockAsync(async () =>
             {
-                bool initial = await GetInitialAsync(true);
-
-                await _acknowledgedLock.LockAsync(async () =>
+                try
                 {
-                    bool wasAcknowledged = _hasbeenAcknowledged;
-                    if (OriginalInteraction is SocketMessageComponent smc && !wasAcknowledged)
+                    bool initial = await GetInitialAsync(true);
+
+                    var previousStatus = _acknowledgeStatus;
+                    if (OriginalInteraction is SocketMessageComponent smc && previousStatus == RequestAcknowledgeStatus.NotAcknowledged)
                     {
                         await smc.UpdateAsync(propBuilder);
-                        _hasbeenAcknowledged = true;
+                        _acknowledgeStatus = RequestAcknowledgeStatus.Acknowledged;
                     }
                     else
                     {
-                        if (initial && !wasAcknowledged)
+                        if (initial && previousStatus == RequestAcknowledgeStatus.NotAcknowledged)
                         {
                             await OriginalInteraction.DeferAsync(true);
-                            _hasbeenAcknowledged = true;
+                            _acknowledgeStatus = RequestAcknowledgeStatus.Acknowledged;
                         }
 
                         var message = await OriginalInteraction.GetOriginalResponseAsync();
                         await message.ModifyAsync(propBuilder);
                     }
-                });
-            }
-            catch (HttpException e)
-            {
-                Console.WriteLine(e.ToString());
-            }
+                }
+                catch (HttpException e)
+                {
+                    _acknowledgeStatus = RequestAcknowledgeStatus.AcknowledgeFailed;
+                    Console.WriteLine(e.ToString());
+                }
+            });
         }
 
         private async Task TryDeleteOriginalMessageAsync()
         {
-            if (!_hasbeenAcknowledged)
+            if (_acknowledgeStatus == RequestAcknowledgeStatus.NotAcknowledged)
             {
-                await OriginalInteraction.DeferAsync();
-                _hasbeenAcknowledged = true;
+                try
+                {
+                    await OriginalInteraction.DeferAsync();
+                    _acknowledgeStatus = RequestAcknowledgeStatus.Acknowledged;
+                }
+                catch (HttpException)
+                {
+                    _acknowledgeStatus = RequestAcknowledgeStatus.AcknowledgeFailed;
+                }
             }
 
             _ = Task.Run(async () =>
             {
-                try
-                {
-
-                    await (await OriginalInteraction.GetOriginalResponseAsync())?.DeleteAsync();
-                }
+                try { await (await OriginalInteraction.GetOriginalResponseAsync())?.DeleteAsync(); }
                 catch { /*eh*/ }
             });
         }

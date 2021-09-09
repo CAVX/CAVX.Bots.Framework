@@ -61,5 +61,59 @@ namespace Bot.Modules.Contexts
         public abstract Task<RestUserMessage> ReplyWithFileAsync(EphemeralRule ephemeralRule, Stream stream, string filename, bool isSpoiler, string message = null, bool isTTS = false, Embed[] embeds = null,
             Embed embed = null,  RequestOptions options = null, AllowedMentions allowedMentions = null, MessageReference messageReference = null, MessageComponent components = null, bool hasMentions = false);
         public abstract Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null);
+
+
+        public Task ReplyBuilderAsync(IServiceProvider baseServices, MessageBuilder messageBuilder, bool ephemeral, ulong? referenceMessageId = null)
+            => ReplyBuilderAsync(baseServices, messageBuilder, ephemeral ? EphemeralRule.EphemeralOrFallback : EphemeralRule.Permanent, referenceMessageId);
+        public async Task ReplyBuilderAsync(IServiceProvider baseServices, MessageBuilder messageBuilder, EphemeralRule ephemeralRule, ulong? referenceMessageId = null)
+        {
+            var messageData = messageBuilder.BuildOutput();
+
+            if (messageData != null && (messageData.Embed != null || messageData.Message != null))
+            {
+                ephemeralRule = !messageBuilder.Success && ephemeralRule == EphemeralRule.Permanent ? EphemeralRule.EphemeralOrFallback : ephemeralRule;
+
+                Stream stream = null;
+                if (messageData.ImageStream != null)
+                {
+                    if (messageData.ImageStream.CanRead)
+                        stream = messageData.ImageStream;
+                    else if (messageData.ImageStream is MemoryStream memoryStream)
+                    {
+                        stream = new MemoryStream(memoryStream.ToArray());
+                        stream.Seek(0, SeekOrigin.Begin);
+                    }
+                }
+
+                var message = stream == null
+                    ? await ReplyWithMessageAsync(ephemeralRule, messageData.Message, embed: messageData.Embed, components: messageData.Components,
+                        messageReference: referenceMessageId.HasValue ? new MessageReference(referenceMessageId.Value) : null, hasMentions: messageData.HasMentions).ConfigureAwait(false)
+                    : await ReplyWithFileAsync(ephemeralRule, stream, messageData.ImageFileName, messageData.ImageIsSpoiler, messageData.Message, embed: messageData.Embed,
+                        components: messageData.Components, messageReference: referenceMessageId.HasValue ? new MessageReference(referenceMessageId.Value) : null,
+                        hasMentions: messageData.HasMentions).ConfigureAwait(false);
+
+                if (messageBuilder.GetDeferredMessage != null)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            using var scope = baseServices.CreateScope();
+                            var innerBuilder = await messageBuilder.GetDeferredMessage.Invoke(scope.ServiceProvider, this, message);
+                            if (innerBuilder != null)
+                            {
+                                await ReplyBuilderAsync(baseServices, innerBuilder, ephemeralRule, message.Id);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine(e);
+                            await ReplyWithMessageAsync(ephemeralRule, "Waaaaah! Something went wrong!").ConfigureAwait(false);
+                            return;
+                        }
+                    });
+                }
+            }
+        }
     }
 }

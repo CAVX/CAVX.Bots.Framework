@@ -98,7 +98,7 @@ namespace Bot.Processing
                     if (secondsToWait > 0)
                         await Task.Delay((secondsToWait * 1000).IntLop(Math.Floor));
 
-                    await ic.HadBeenAcknowledgedAsync(true, async () => await si.DeferAsync(action.EphemeralRule.ToEphemeral()));
+                    await ic.HadBeenAcknowledgedAsync(RequestAcknowledgeStatus.Acknowledged, async () => await si.DeferAsync(action.EphemeralRule.ToEphemeral()));
                 }
                 catch { }
             });
