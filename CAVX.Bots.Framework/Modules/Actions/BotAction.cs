@@ -88,7 +88,7 @@ namespace CAVX.Bots.Framework.Modules.Actions
 
         public abstract Task RunAsync();
 
-        public (bool Success, string Message) IsGameCommandAllowedInGuild()
+        public (bool Success, string Message) IsCommandAllowedInGuild()
         {
             if (GuildsOnly && Context.Channel is IDMChannel)
                 return (false, $"You can't do that here! Find a server that I'm in, instead!");
