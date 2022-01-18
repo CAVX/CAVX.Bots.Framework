@@ -15,5 +15,6 @@ namespace CAVX.Bots.Framework.Services.Settings
         public Func<string, (bool Success, T Value)> Conversion { get; set; }
 
         public SettingMetadata(string description, T defaultValue, Func<string, (bool Success, T Value)> conversion) : base(description, defaultValue.ToString()) { Conversion = conversion; }
+        public SettingMetadata(string description, string defaultValue, Func<string, (bool Success, T Value)> conversion) : base(description, defaultValue) { Conversion = conversion; }
     }
 }
