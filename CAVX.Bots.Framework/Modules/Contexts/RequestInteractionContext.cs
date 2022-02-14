@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using CAVX.Bots.Framework.Services;
 using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Utilities;
+using CAVX.Bots.Framework.Extensions;
 
 namespace CAVX.Bots.Framework.Modules.Contexts
 {
@@ -159,25 +160,36 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                                 ? await Channel.SendFilesAsync(attachments, message, isTTS, embed, options, allowedMentions, messageReference, components) as RestUserMessage
                                 : await Channel.SendMessageAsync(message, isTTS, embed ?? embeds?.FirstOrDefault(), options, allowedMentions, messageReference, components));
                 }
+                catch (TimeoutException te)
+                {
+                    return await RetryReplyAsync(te, ephemeralRule, message, isTTS, attachments, embeds, embed, options, allowedMentions, messageReference, components, initial, hasAttachments);
+                }
                 catch (HttpException e)
                 {
-                    _acknowledgeStatus = RequestAcknowledgeStatus.AcknowledgeFailed;
-                    Console.WriteLine(e.ToString());
-                    await Logger.Instance.LogErrorAsync(this, "RequestInteractionContext.ReplyWithMessageAsync", e);
-
-                    if (initial && OriginalInteraction is SocketSlashCommand)
-                        await TryDeleteOriginalMessageAsync();
-
-                    if (ephemeralRule == EphemeralRule.EphemeralOrFail)
-                        return await _sendMessageQueueLock.LockAsync(async () =>
-                            await Channel.SendMessageAsync("It took me too long to process that, and I don't want to show anyone else! Sorry! Try again!"));
-                    else
-                        return await _sendMessageQueueLock.LockAsync(async () =>
-                            hasAttachments
-                                ? await Channel.SendFilesAsync(attachments, message, isTTS, embed, options, allowedMentions, messageReference, components) as RestUserMessage
-                                : await Channel.SendMessageAsync(message, isTTS, embed ?? embeds?.FirstOrDefault(), options, allowedMentions, messageReference, components));
+                    return await RetryReplyAsync(e, ephemeralRule, message, isTTS, attachments, embeds, embed, options, allowedMentions, messageReference, components, initial, hasAttachments);
                 }
             });
+        }
+
+        private async Task<RestUserMessage> RetryReplyAsync(Exception ex, EphemeralRule ephemeralRule, string message, bool isTTS, FileAttachment[] attachments,
+            Embed[] embeds, Embed embed, RequestOptions options, AllowedMentions allowedMentions, MessageReference messageReference, MessageComponent components,
+            bool initial, bool hasAttachments)
+        {
+            _acknowledgeStatus = RequestAcknowledgeStatus.AcknowledgeFailed;
+            Console.WriteLine(ex.ToString());
+            await Logger.Instance.LogErrorAsync(this, "RequestInteractionContext.ReplyWithMessageAsync", ex);
+
+            if (initial && OriginalInteraction is SocketSlashCommand)
+                await TryDeleteOriginalMessageAsync();
+
+            if (ephemeralRule == EphemeralRule.EphemeralOrFail)
+                return await _sendMessageQueueLock.LockAsync(async () =>
+                    await Channel.SendMessageAsync("It took me too long to process that, and I don't want to show anyone else! Sorry! Try again!"));
+            else
+                return await _sendMessageQueueLock.LockAsync(async () =>
+                    hasAttachments
+                        ? await Channel.SendFilesAsync(attachments, message, isTTS, embed, options, allowedMentions, messageReference, components) as RestUserMessage
+                        : await Channel.SendMessageAsync(message, isTTS, embed ?? embeds?.FirstOrDefault(), options, allowedMentions, messageReference, components));
         }
 
         public override async Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null)

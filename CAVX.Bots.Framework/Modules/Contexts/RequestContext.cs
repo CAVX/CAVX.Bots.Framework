@@ -70,14 +70,14 @@ namespace CAVX.Bots.Framework.Modules.Contexts
             {
                 ephemeralRule = !messageBuilder.Success && ephemeralRule == EphemeralRule.Permanent ? EphemeralRule.EphemeralOrFallback : ephemeralRule;
 
-                Stream stream = messageData.ImageStream;
+                byte[] streamBytes = messageData.ImageStreamBytes;
+                using Stream stream = streamBytes == null ? null : new MemoryStream(streamBytes);
 
                 //Getting several messages from the framework - this is my super hacky way around them.
                 RestUserMessage message = null;
                 int errorCount = 0;
                 while (errorCount <= 1)
                 {
-                    stream = stream.RefreshOrUse();
                     try
                     {
                         FileAttachment[] attachments = stream == null ? null

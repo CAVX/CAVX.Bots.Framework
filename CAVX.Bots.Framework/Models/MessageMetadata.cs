@@ -9,7 +9,7 @@ namespace CAVX.Bots.Framework.Models
     public class MessageMetadata
     {
         public Embed Embed { get; set; }
-        public Stream ImageStream { get; set; }
+        public byte[] ImageStreamBytes { get; set; }
         public bool ImageIsSpoiler { get; set; }
         public string ImageFileName { get; set; }
         public string Message { get; set; }
@@ -17,10 +17,10 @@ namespace CAVX.Bots.Framework.Models
         public bool HasMentions { get; set; }
         public MessageComponent Components { get; set; }
 
-        public MessageMetadata(Embed embed, Stream imageStream, bool imageIsSpoiler, string imageFileName, string message, bool success, bool hasMentions, ComponentBuilder componentBuilder)
+        public MessageMetadata(Embed embed, byte[] imageStreamBytes, bool imageIsSpoiler, string imageFileName, string message, bool success, bool hasMentions, ComponentBuilder componentBuilder)
         {
             Embed = embed;
-            ImageStream = imageStream;
+            ImageStreamBytes = imageStreamBytes;
             ImageIsSpoiler = imageIsSpoiler;
             ImageFileName = imageFileName;
             Message = message;
