@@ -67,7 +67,7 @@ namespace CAVX.Bots.Framework.Modules.Actions
                 }
                 else
                 {
-                    if (!HasCorrectPermissions(Context.User as IGuildUser))
+                    if (!HasCorrectPermissions(Context.User as IGuildUser, RequiredPermissions.Value))
                         return (false, $"You don't have the permissions to run that command! Sorry!");
                 }
             }
@@ -75,9 +75,8 @@ namespace CAVX.Bots.Framework.Modules.Actions
             return await CheckCustomPreconditionsAsync();
         }
 
-        private bool HasCorrectPermissions(IGuildUser user)
+        protected bool HasCorrectPermissions(IGuildUser user, GuildPermissions guildPermissions)
         {
-            var guildPermissions = RequiredPermissions.Value;
             var userPermissions = user.GuildPermissions;
 
             return userPermissions.Administrator ||
