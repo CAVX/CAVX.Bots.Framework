@@ -29,6 +29,8 @@ namespace CAVX.Bots.Framework.Processing
                 return new ActionMessageRunFactory(actionService, context, msgCommand);
             else if (interaction is SocketUserCommand userCommand)
                 return new ActionUserRunFactory(actionService, context, userCommand);
+            else if (interaction is SocketAutocompleteInteraction autocompleteInteraction)
+                return new ActionAutocompleteResponseFactory(actionService, context, autocompleteInteraction);
             else if (interaction is SocketMessageComponent component)
             {
                 if (component.Data.CustomId.StartsWith('#') || component.Data.CustomId.StartsWith('^')) //# = refresh component, ^ = refresh into new component
@@ -140,7 +142,7 @@ namespace CAVX.Bots.Framework.Processing
             return true;
         }
 
-        private async Task<bool> CheckPreconditionsAsync(TAction action)
+        protected virtual async Task<bool> CheckPreconditionsAsync(TAction action)
         {
             var (Success, Message) = await action.CheckPreconditionsAsync();
             if (!Success)
@@ -314,6 +316,30 @@ namespace CAVX.Bots.Framework.Processing
         protected override async Task RunActionAsync(BotComponentAction action)
         {
             await action.RunAsync();
+        }
+    }
+
+    public class ActionAutocompleteResponseFactory : ActionRunFactory<SocketAutocompleteInteraction, BotCommandAction>
+    {
+        protected override string InteractionNameForLog => _interaction.Data.CommandName;
+
+        public ActionAutocompleteResponseFactory(ActionService actionService, RequestContext context, SocketAutocompleteInteraction interaction) : base(actionService, context, interaction) { }
+
+        protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.SlashCommandProperties != null && a.SlashCommandProperties.AutocompleteAsync != null && a.SlashCommandProperties.Name == _interaction.Data.CommandName);
+
+        protected override Task<bool> CheckPreconditionsAsync(BotCommandAction action) => Task.FromResult(true);
+
+        protected override Task PopulateParametersAsync(BotCommandAction action)
+        {
+            //if (action.SlashCommandProperties.FillParametersAsync != null)
+                //await action.SlashCommandProperties.FillParametersAsync(_interaction.Data.Options);
+            return Task.CompletedTask;
+        }
+
+        protected override async Task RunActionAsync(BotCommandAction action)
+        {
+            if (action.SlashCommandProperties.AutocompleteAsync.ContainsKey(_interaction.Data.Current.Name))
+                await action.SlashCommandProperties.AutocompleteAsync[_interaction.Data.Current.Name](_interaction);
         }
     }
 

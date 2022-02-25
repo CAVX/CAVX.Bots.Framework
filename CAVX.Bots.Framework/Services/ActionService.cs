@@ -184,7 +184,7 @@ namespace CAVX.Bots.Framework.Services
 
                     foreach (var p in filteredParameters)
                     {
-                        var option = BuildOptionFromParameter(p.Property, p.Attribute, parameters.ToList(), generatedOptions);
+                        var option = BuildOptionFromParameter(p.Property, p.Attribute, parameters.ToList(), generatedOptions, action.SlashCommandProperties.AutocompleteAsync?.Keys.ToList());
 
                         newCommand.AddOption(option);
                     }
@@ -237,7 +237,7 @@ namespace CAVX.Bots.Framework.Services
             await (await _discord.Rest.GetGuildApplicationCommands(guildId)).FirstOrDefault(c => c.Name == name)?.DeleteAsync();
         }
 
-        private SlashCommandOptionBuilder BuildOptionFromParameter(PropertyInfo property, ActionParameterSlashAttribute attribute, List<(PropertyInfo Property, ActionParameterSlashAttribute Attribute)> parameters, Dictionary<string, List<(string Name, string Value)>> generatedOptions)
+        private SlashCommandOptionBuilder BuildOptionFromParameter(PropertyInfo property, ActionParameterSlashAttribute attribute, List<(PropertyInfo Property, ActionParameterSlashAttribute Attribute)> parameters, Dictionary<string, List<(string Name, string Value)>> generatedOptions, List<string> autocompleteParameters)
         {
             var option = new SlashCommandOptionBuilder()
             {
@@ -246,6 +246,7 @@ namespace CAVX.Bots.Framework.Services
                 IsRequired = attribute.Required,
                 Type = attribute.Type,
                 IsDefault = attribute.DefaultSubCommand ? true : null,
+                IsAutocomplete = autocompleteParameters?.Contains(attribute.Name) ?? false,
             };
 
             var stringChoices = property.GetCustomAttributes(false).OfType<ActionParameterOptionStringAttribute>()?.OrderBy(c => c.Order);
@@ -277,7 +278,7 @@ namespace CAVX.Bots.Framework.Services
             {
                 foreach (var p in filteredParameters)
                 {
-                    var subOption = BuildOptionFromParameter(p.Property, p.Attribute, filteredParameters, null);
+                    var subOption = BuildOptionFromParameter(p.Property, p.Attribute, filteredParameters, null, autocompleteParameters);
 
                     option.AddOption(subOption);
                 }

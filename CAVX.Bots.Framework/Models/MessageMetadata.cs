@@ -28,10 +28,5 @@ namespace CAVX.Bots.Framework.Models
             HasMentions = hasMentions;
             Components = componentBuilder?.Build();
         }
-
-        internal object RandomElement()
-        {
-            throw new NotImplementedException();
-        }
     }
 }
