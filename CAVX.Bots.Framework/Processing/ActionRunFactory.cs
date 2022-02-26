@@ -338,8 +338,12 @@ namespace CAVX.Bots.Framework.Processing
 
         protected override async Task RunActionAsync(BotCommandAction action)
         {
-            if (action.SlashCommandProperties.AutocompleteAsync.ContainsKey(_interaction.Data.Current.Name))
-                await action.SlashCommandProperties.AutocompleteAsync[_interaction.Data.Current.Name](_interaction);
+            try
+            {
+                if (action.SlashCommandProperties.AutocompleteAsync.ContainsKey(_interaction.Data.Current.Name))
+                    await action.SlashCommandProperties.AutocompleteAsync[_interaction.Data.Current.Name](_interaction);
+            }
+            catch (TimeoutException) {  }
         }
     }
 
