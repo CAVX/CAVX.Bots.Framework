@@ -8,7 +8,7 @@ namespace CAVX.Bots.Framework.Models
 {
     public class MessageMetadata
     {
-        public Embed Embed { get; set; }
+        public Embed[] Embeds { get; set; }
         public byte[] ImageStreamBytes { get; set; }
         public bool ImageIsSpoiler { get; set; }
         public string ImageFileName { get; set; }
@@ -17,9 +17,32 @@ namespace CAVX.Bots.Framework.Models
         public bool HasMentions { get; set; }
         public MessageComponent Components { get; set; }
 
-        public MessageMetadata(Embed embed, byte[] imageStreamBytes, bool imageIsSpoiler, string imageFileName, string message, bool success, bool hasMentions, ComponentBuilder componentBuilder)
+        public MessageMetadata(byte[] imageStreamBytes, bool imageIsSpoiler, string imageFileName, string message, bool success, bool hasMentions, ComponentBuilder componentBuilder)
         {
-            Embed = embed;
+            ImageStreamBytes = imageStreamBytes;
+            ImageIsSpoiler = imageIsSpoiler;
+            ImageFileName = imageFileName;
+            Message = message;
+            Success = success;
+            HasMentions = hasMentions;
+            Components = componentBuilder?.Build();
+        }
+
+        public MessageMetadata(Embed embed!!, byte[] imageStreamBytes, bool imageIsSpoiler, string imageFileName, string message, bool success, bool hasMentions, ComponentBuilder componentBuilder)
+        {
+            Embeds = new[] { embed };
+            ImageStreamBytes = imageStreamBytes;
+            ImageIsSpoiler = imageIsSpoiler;
+            ImageFileName = imageFileName;
+            Message = message;
+            Success = success;
+            HasMentions = hasMentions;
+            Components = componentBuilder?.Build();
+        }
+
+        public MessageMetadata(Embed[] embeds, byte[] imageStreamBytes, bool imageIsSpoiler, string imageFileName, string message, bool success, bool hasMentions, ComponentBuilder componentBuilder)
+        {
+            Embeds = embeds;
             ImageStreamBytes = imageStreamBytes;
             ImageIsSpoiler = imageIsSpoiler;
             ImageFileName = imageFileName;

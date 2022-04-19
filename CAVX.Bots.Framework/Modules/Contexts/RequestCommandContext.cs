@@ -7,6 +7,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using CAVX.Bots.Framework.Extensions;
 
 namespace CAVX.Bots.Framework.Modules.Contexts
 {
@@ -33,13 +34,13 @@ namespace CAVX.Bots.Framework.Modules.Contexts
 
             await GetInitialAsync(true);
 
-            if (embed == null && embeds != null && embeds.Any())
-                embed = embeds.FirstOrDefault();
+            if (!embeds.ExistsWithItems() && embed != null)
+                embeds = new Embed[] { embed };
 
             return await _sendMessageQueueLock.LockAsync(async () =>
                 hasAttachments
-                    ? await Channel.SendFilesAsync(attachments, message, isTTS, embed, options, allowedMentions, messageReference, components) as RestUserMessage
-                    : await Channel.SendMessageAsync(message, isTTS, embed, options, allowedMentions, messageReference, components));
+                    ? await Channel.SendFilesAsync(attachments, message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds) as RestUserMessage
+                    : await Channel.SendMessageAsync(message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds));
         }
 
         public override async Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null)

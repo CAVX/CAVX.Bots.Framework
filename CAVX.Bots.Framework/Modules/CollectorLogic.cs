@@ -13,7 +13,7 @@ namespace CAVX.Bots.Framework.Modules
     internal interface ICollectorLogic
     {
         ulong MessageId { get; set; }
-        ulong OriginalUserId { get; set; }
+        ulong? OriginalUserId { get; set; }
         bool OnlyOriginalUserAllowed { get; set; }
         Func<IUser, ulong, object[], object[], Task<(bool Success, string FailureMessage, IMessageBuilder MessageBuilder)>> Execute { get; set; }
     }
@@ -25,7 +25,7 @@ namespace CAVX.Bots.Framework.Modules
         Func<IUser, ulong, object[], object[], Task<(bool Success, string FailureMessage, IMessageBuilder MessageBuilder)>> _execute;
 
         public ulong MessageId { get; set; }
-        public ulong OriginalUserId { get; set; }
+        public ulong? OriginalUserId { get; set; }
         public bool OnlyOriginalUserAllowed { get; set; }
         public Func<IUser, ulong, object[], object[], Task<(bool Success, string FailureMessage, IMessageBuilder MessageBuilder)>> Execute
         {

@@ -9,6 +9,7 @@ using CAVX.Bots.Framework.Services;
 using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Utilities;
 using CAVX.Bots.Framework.Extensions;
+using System.Linq;
 
 namespace CAVX.Bots.Framework.Modules.Contexts
 {
@@ -66,7 +67,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
         {
             var messageData = messageBuilder.BuildOutput();
 
-            if (messageData != null && (messageData.Embed != null || messageData.Message != null))
+            if (messageData != null && (messageData.Embeds.ExistsWithItems() || messageData.Message != null))
             {
                 ephemeralRule = !messageBuilder.Success && ephemeralRule == EphemeralRule.Permanent ? EphemeralRule.EphemeralOrFallback : ephemeralRule;
 
@@ -83,7 +84,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                         FileAttachment[] attachments = stream == null ? null
                             : new FileAttachment[] { new(stream, messageData.ImageFileName, isSpoiler: messageData.ImageIsSpoiler) };
 
-                        message = await ReplyAsync(ephemeralRule, messageData.Message, attachments: attachments, embed: messageData.Embed, components: messageData.Components,
+                        message = await ReplyAsync(ephemeralRule, messageData.Message, attachments: attachments, embeds: messageData.Embeds, components: messageData.Components,
                             messageReference: referenceMessageId.HasValue ? new MessageReference(referenceMessageId.Value) : null, hasMentions: messageData.HasMentions).ConfigureAwait(false);
 
                         break;

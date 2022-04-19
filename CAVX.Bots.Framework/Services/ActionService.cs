@@ -302,62 +302,11 @@ namespace CAVX.Bots.Framework.Services
             _inProgressCollectors.TryGetValue(messageId, out ICollectorLogic collector);
             if (collector == null || collector.Execute == null)
                 return (false, "I couldn't find that action anymore. Maybe you were too late?", null);
-            if (collector.OnlyOriginalUserAllowed && collector.OriginalUserId != user.Id)
+            if (collector.OnlyOriginalUserAllowed && (!collector.OriginalUserId.HasValue || collector.OriginalUserId != user.Id))
                 return (false, "Sorry, for this outcome, only the original user gets to pick!", null);
 
             return await collector.Execute(user, messageId, idParams, selectParams);
         }
-
-        /*
-         * For now, just working without this. It's not robust enough. Will be better to build my own.
-         *
-        private async Task ClientJoinedGuildAsync(SocketGuild guild)
-        {
-            try
-            {
-                await SetOwnerPermissionsAsync(guild);
-            }
-            catch (ApplicationCommandException exception)
-            {
-                // If our command was invalid, we should catch an ApplicationCommandException. This exception contains the path of the error as well as the error message. You can serialize the Error field in the exception to get a visual of where your error is.
-                var json = JsonConvert.SerializeObject(exception.Error, Formatting.Indented);
-                Console.WriteLine(json);
-            }
-        }
-
-        private async Task SetOwnerPermissionsAsync(SocketGuild guild)
-        {
-            var globalCommands = (await _discord.Rest.GetGlobalApplicationCommands()).Where(c => !c.DefaultPermission);
-            List<ulong> commandIds = globalCommands.Where(c => !c.DefaultPermission).Select(c => c.Id).ToList();
-
-        //use context for this now? there's a method
-            var application = await _discord.GetApplicationInfoAsync().ConfigureAwait(false);
-
-            ulong botOwnerId = application.Owner.Id;
-            ulong guildOwnerId = guild.OwnerId;
-
-            List<ulong> modRoleIds = guild.Roles.Where(r => r.Permissions.ManageRoles).Take(8).Select(r => r.Id)?.ToList();
-
-            var permDict = new Dictionary<ulong, ApplicationCommandPermission[]>();
-            foreach (ulong id in commandIds)
-            {
-                var perms = new List<ApplicationCommandPermission>
-                {
-                    new ApplicationCommandPermission(botOwnerId, ApplicationCommandPermissionTarget.User, true),
-                    new ApplicationCommandPermission(guildOwnerId, ApplicationCommandPermissionTarget.User, true),
-                };
-                foreach (ulong roleId in modRoleIds)
-                    perms.Add(new ApplicationCommandPermission(roleId, ApplicationCommandPermissionTarget.Role, true));
-
-                permDict.Add(id, perms.ToArray());
-            }
-
-            if (permDict.Any())
-            {
-                await _discord.Rest.BatchEditGuildCommandPermissions(guild.Id, permDict);
-            }
-        }
-        */
 
         private async Task Client_InteractionCreated(SocketInteraction arg)
         {

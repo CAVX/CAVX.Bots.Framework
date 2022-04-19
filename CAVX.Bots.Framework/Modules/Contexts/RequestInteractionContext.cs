@@ -77,6 +77,9 @@ namespace CAVX.Bots.Framework.Modules.Contexts
             Embed[] embeds = null, Embed embed = null, RequestOptions options = null, AllowedMentions allowedMentions = null, MessageReference messageReference = null,
             MessageComponent components = null, bool hasMentions = false)
         {
+            if (!embeds.ExistsWithItems() && embed != null)
+                embeds = new Embed[] { embed };
+
             return await _acknowledgedLock.LockAsync(async () =>
             {
                 bool initial = await GetInitialAsync(true);
@@ -88,9 +91,9 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                     if (initial && previousStatus == RequestAcknowledgeStatus.NotAcknowledged)
                     {
                         if (hasAttachments)
-                            await OriginalInteraction.RespondWithFilesAsync(attachments, message, embeds, isTTS, ephemeralRule.ToEphemeral(), allowedMentions, components, embed, options);
+                            await OriginalInteraction.RespondWithFilesAsync(attachments, message, embeds, isTTS, ephemeralRule.ToEphemeral(), allowedMentions, components, null, options);
                         else
-                            await OriginalInteraction.RespondAsync(message, embeds, isTTS, ephemeralRule.ToEphemeral(), allowedMentions, components, embed, options);
+                            await OriginalInteraction.RespondAsync(message, embeds, isTTS, ephemeralRule.ToEphemeral(), allowedMentions, components, null, options);
                         _acknowledgeStatus = RequestAcknowledgeStatus.Acknowledged;
 
                         try
@@ -111,8 +114,8 @@ namespace CAVX.Bots.Framework.Modules.Contexts
 
                             return await _sendMessageQueueLock.LockAsync(async () =>
                                 hasAttachments
-                                    ? await Channel.SendFilesAsync(attachments, message, isTTS, embed, options, allowedMentions, messageReference, components) as RestUserMessage
-                                    : await Channel.SendMessageAsync(message, isTTS, embed ?? embeds?.FirstOrDefault(), options, allowedMentions, messageReference, components));
+                                    ? await Channel.SendFilesAsync(attachments, message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds) as RestUserMessage
+                                    : await Channel.SendMessageAsync(message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds));
                         }
                         else if (!hasAttachments)
                         {
@@ -125,7 +128,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                                         mp.Flags = MessageFlags.None;
 
                                     mp.Content = message;
-                                    mp.Embeds = embeds ?? (embed == null ? null : new Embed[] { embed });
+                                    mp.Embeds = embeds;
                                     mp.AllowedMentions = allowedMentions;
                                     mp.Components = components;
                                     mp.Attachments = attachments;
@@ -140,7 +143,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                                         mp.Flags = MessageFlags.None;
 
                                     mp.Content = message;
-                                    mp.Embeds = embeds ?? (embed == null ? null : new Embed[] { embed });
+                                    mp.Embeds = embeds;
                                     mp.AllowedMentions = allowedMentions;
                                     mp.Components = components;
                                     mp.Attachments = attachments;
@@ -152,21 +155,21 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                     if (messageReference == null || ephemeralRule == EphemeralRule.EphemeralOrFail)
                         return await _sendMessageQueueLock.LockAsync(async () =>
                             hasAttachments
-                                ? await OriginalInteraction.FollowupWithFilesAsync(attachments, message, embeds, isTTS, ephemeralRule.ToEphemeral(), allowedMentions, components, embed, options)
-                                : await OriginalInteraction.FollowupAsync(message, embeds, isTTS, ephemeralRule.ToEphemeral(), allowedMentions, components, embed, options));
+                                ? await OriginalInteraction.FollowupWithFilesAsync(attachments, message, embeds, isTTS, ephemeralRule.ToEphemeral(), allowedMentions, components, null, options)
+                                : await OriginalInteraction.FollowupAsync(message, embeds, isTTS, ephemeralRule.ToEphemeral(), allowedMentions, components, null, options));
                     else
                         return await _sendMessageQueueLock.LockAsync(async () =>
                             hasAttachments
-                                ? await Channel.SendFilesAsync(attachments, message, isTTS, embed, options, allowedMentions, messageReference, components) as RestUserMessage
-                                : await Channel.SendMessageAsync(message, isTTS, embed ?? embeds?.FirstOrDefault(), options, allowedMentions, messageReference, components));
+                                ? await Channel.SendFilesAsync(attachments, message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds) as RestUserMessage
+                                : await Channel.SendMessageAsync(message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds));
                 }
                 catch (TimeoutException te)
                 {
-                    return await RetryReplyAsync(te, ephemeralRule, message, isTTS, attachments, embeds, embed, options, allowedMentions, messageReference, components, initial, hasAttachments);
+                    return await RetryReplyAsync(te, ephemeralRule, message, isTTS, attachments, embeds, null, options, allowedMentions, messageReference, components, initial, hasAttachments);
                 }
                 catch (HttpException e)
                 {
-                    return await RetryReplyAsync(e, ephemeralRule, message, isTTS, attachments, embeds, embed, options, allowedMentions, messageReference, components, initial, hasAttachments);
+                    return await RetryReplyAsync(e, ephemeralRule, message, isTTS, attachments, embeds, null, options, allowedMentions, messageReference, components, initial, hasAttachments);
                 }
             });
         }
@@ -188,8 +191,8 @@ namespace CAVX.Bots.Framework.Modules.Contexts
             else
                 return await _sendMessageQueueLock.LockAsync(async () =>
                     hasAttachments
-                        ? await Channel.SendFilesAsync(attachments, message, isTTS, embed, options, allowedMentions, messageReference, components) as RestUserMessage
-                        : await Channel.SendMessageAsync(message, isTTS, embed ?? embeds?.FirstOrDefault(), options, allowedMentions, messageReference, components));
+                        ? await Channel.SendFilesAsync(attachments, message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds) as RestUserMessage
+                        : await Channel.SendMessageAsync(message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds));
         }
 
         public override async Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null)

@@ -8,6 +8,8 @@ namespace CAVX.Bots.Framework.Extensions
 {
     public static class CollectionExtensions
     {
+        public static bool ExistsWithItems<T>(this IEnumerable<T> list) => list != null && list.Any();
+
         public static T RandomElement<T>(this IEnumerable<T> sequence, Random random = null)
         {
             var count = sequence.Count();
