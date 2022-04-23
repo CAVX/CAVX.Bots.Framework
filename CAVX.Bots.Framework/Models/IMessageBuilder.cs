@@ -59,7 +59,7 @@ namespace CAVX.Bots.Framework.Models
 
     public interface IMessageBuilder
     {
-        bool Success { get; set; }
+        MessageResultCode Result { get; set; }
         IDeferredInvoke DeferredBuilder { get; set; }
         MessageMetadata BuildOutput();
     }

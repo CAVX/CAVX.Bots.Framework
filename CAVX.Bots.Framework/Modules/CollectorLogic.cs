@@ -15,19 +15,19 @@ namespace CAVX.Bots.Framework.Modules
         ulong MessageId { get; set; }
         ulong? OriginalUserId { get; set; }
         bool OnlyOriginalUserAllowed { get; set; }
-        Func<IUser, ulong, object[], object[], Task<(bool Success, string FailureMessage, IMessageBuilder MessageBuilder)>> Execute { get; set; }
+        Func<IUser, ulong, object[], object[], Task<(MessageResultCode Result, string FailureMessage, IMessageBuilder MessageBuilder)>> Execute { get; set; }
     }
 
     public class CollectorLogic : ICollectorLogic
     {
         SemaphoreLocker _resultLock = new();
         bool _enabled = true;
-        Func<IUser, ulong, object[], object[], Task<(bool Success, string FailureMessage, IMessageBuilder MessageBuilder)>> _execute;
+        Func<IUser, ulong, object[], object[], Task<(MessageResultCode Result, string FailureMessage, IMessageBuilder MessageBuilder)>> _execute;
 
         public ulong MessageId { get; set; }
         public ulong? OriginalUserId { get; set; }
         public bool OnlyOriginalUserAllowed { get; set; }
-        public Func<IUser, ulong, object[], object[], Task<(bool Success, string FailureMessage, IMessageBuilder MessageBuilder)>> Execute
+        public Func<IUser, ulong, object[], object[], Task<(MessageResultCode Result, string FailureMessage, IMessageBuilder MessageBuilder)>> Execute
         {
             get => _execute;
             set
@@ -43,7 +43,7 @@ namespace CAVX.Bots.Framework.Modules
                             if (_enabled)
                                 return await value(userData, messageId, idOptions, selectOptions);
 
-                            return (false, "Sorry! You were just too late!", null);
+                            return (MessageResultCode.ExecutionFailed, "Sorry! You were just too late!", null);
                         });
                     };
                 }

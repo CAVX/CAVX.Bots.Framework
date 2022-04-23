@@ -297,13 +297,13 @@ namespace CAVX.Bots.Framework.Services
             return _inProgressCollectors.TryGetValue(messageId, out _);
         }
 
-        public async Task<(bool Success, string FailureMessage, IMessageBuilder MessageBuilder)> FireCollectorAsync(IUser user, ulong messageId, object[] idParams, object[] selectParams)
+        public async Task<(MessageResultCode Result, string FailureMessage, IMessageBuilder MessageBuilder)> FireCollectorAsync(IUser user, ulong messageId, object[] idParams, object[] selectParams)
         {
             _inProgressCollectors.TryGetValue(messageId, out ICollectorLogic collector);
             if (collector == null || collector.Execute == null)
-                return (false, "I couldn't find that action anymore. Maybe you were too late?", null);
+                return (MessageResultCode.PreconditionFailed, "I couldn't find that action anymore. Maybe you were too late?", null);
             if (collector.OnlyOriginalUserAllowed && (!collector.OriginalUserId.HasValue || collector.OriginalUserId != user.Id))
-                return (false, "Sorry, for this outcome, only the original user gets to pick!", null);
+                return (MessageResultCode.PreconditionFailed, "Sorry, for this outcome, only the original user gets to pick!", null);
 
             return await collector.Execute(user, messageId, idParams, selectParams);
         }

@@ -69,7 +69,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
 
             if (messageData != null && (messageData.Embeds.ExistsWithItems() || messageData.Message != null))
             {
-                ephemeralRule = !messageBuilder.Success && ephemeralRule == EphemeralRule.Permanent ? EphemeralRule.EphemeralOrFallback : ephemeralRule;
+                ephemeralRule = messageBuilder.Result != MessageResultCode.Success && ephemeralRule == EphemeralRule.Permanent ? EphemeralRule.EphemeralOrFallback : ephemeralRule;
 
                 byte[] streamBytes = messageData.ImageStreamBytes;
                 using Stream stream = streamBytes == null ? null : new MemoryStream(streamBytes);

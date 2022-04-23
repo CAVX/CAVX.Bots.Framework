@@ -12,6 +12,11 @@ namespace CAVX.Bots.Framework.Extensions
 {
     public static class ListExtensions
     {
+        public static void AddMultiple<T>(this List<T> list, params T[] collection)
+        {
+            list.AddRange(collection);
+        }
+
         public static List<T> Shuffle<T>(this List<T> list)
         {
             var count = list.Count;

@@ -77,8 +77,8 @@ namespace CAVX.Bots.Framework.Modules.Actions
                     messageId = newMessageId.Value;
             }
 
-            var (Success, FailureMessage, Builder) = await _actionService.FireCollectorAsync(userData, messageId, IdParams, SelectParams);
-            if (!Success)
+            var (Result, FailureMessage, Builder) = await _actionService.FireCollectorAsync(userData, messageId, IdParams, SelectParams);
+            if (Result != MessageResultCode.Success)
             {
                 if (Builder == null)
                     await Context.ReplyAsync(true, FailureMessage ?? "Something went wrong!");
