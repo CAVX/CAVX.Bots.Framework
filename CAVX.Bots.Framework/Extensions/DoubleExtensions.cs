@@ -12,5 +12,13 @@ namespace CAVX.Bots.Framework.Extensions
         {
             return Convert.ToInt32(mathFunc.Invoke(number));
         }
+
+        public static string S(this double i)
+        {
+            if (i == 1 || i == -1)
+                return "";
+            else
+                return "s";
+        }
     }
 }
