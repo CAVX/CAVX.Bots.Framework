@@ -47,19 +47,12 @@ namespace CAVX.Bots.Framework.Modules
                             builder.Summary = textProperties.Summary;
                             if (action.GuildsOnly)
                                 builder.AddPrecondition(new RequireContextAttribute(ContextType.Guild));
-                            if (action.RequiredPermissions.HasValue)
+                            if (action.RequiredAccessRule != null)
                             {
-                                var requiredPermissions = action.RequiredPermissions.Value.ToList();
-                                if (!requiredPermissions.Any())
+                                if (action.RequiredAccessRule.PermissionType == Models.ActionPermissionType.RequireOwner)
                                     builder.AddPrecondition(new RequireOwnerAttribute());
-                                else
-                                {
-                                    GuildPermission permissions = 0;
-                                    foreach (var permission in requiredPermissions)
-                                        permissions |= permission;
-
-                                    builder.AddPrecondition(new RequireUserPermissionAttribute(permissions));
-                                }
+                                else if (action.RequiredAccessRule.PermissionType == Models.ActionPermissionType.RequirePermission && action.RequiredAccessRule.RequiredPermission.HasValue)
+                                    builder.AddPrecondition(new RequireUserPermissionAttribute(action.RequiredAccessRule.RequiredPermission.Value));
                             }
                             if (textProperties.Priority.HasValue)
                                 builder.Priority = textProperties.Priority.Value;

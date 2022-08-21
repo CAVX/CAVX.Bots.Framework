@@ -21,7 +21,7 @@ namespace CAVX.Bots.Framework.Modules.Actions
 
         public abstract EphemeralRule EphemeralRule { get; }
         public abstract bool GuildsOnly { get; }
-        public abstract GuildPermissions? RequiredPermissions { get; }
+        public abstract ActionAccessRule RequiredAccessRule { get; }
 
         public bool ValidateParameters<T>(string filterCommandName = null) where T : IActionParameterAttribute
         {
@@ -57,17 +57,17 @@ namespace CAVX.Bots.Framework.Modules.Actions
 
         public async Task<(bool Success, string Message)> CheckPreconditionsAsync()
         {
-            if (RequiredPermissions.HasValue)
+            if (RequiredAccessRule != null)
             {
-                if (!RequiredPermissions.Value.ToList().Any())
+                if (RequiredAccessRule.PermissionType == ActionPermissionType.RequireOwner)
                 {
                     ulong botOwnerId = await Context.GetBotOwnerIdAsync();
                     if (botOwnerId != Context.User.Id)
                         return (false, $"You need to be the bot creator to run that command! Sorry!");
                 }
-                else
+                else if (RequiredAccessRule.PermissionType == ActionPermissionType.RequirePermission && RequiredAccessRule.RequiredPermission.HasValue)
                 {
-                    if (!HasCorrectPermissions(Context.User as IGuildUser, RequiredPermissions.Value))
+                    if (!HasCorrectPermissions(Context.User as IGuildUser, RequiredAccessRule.RequiredPermission.Value))
                         return (false, $"You don't have the permissions to run that command! Sorry!");
                 }
             }
@@ -75,12 +75,11 @@ namespace CAVX.Bots.Framework.Modules.Actions
             return await CheckCustomPreconditionsAsync();
         }
 
-        protected bool HasCorrectPermissions(IGuildUser user, GuildPermissions guildPermissions)
+        protected bool HasCorrectPermissions(IGuildUser user, GuildPermission guildPermission)
         {
             var userPermissions = user.GuildPermissions;
 
-            return userPermissions.Administrator ||
-                guildPermissions.ToList().All(p => userPermissions.Has(p));
+            return userPermissions.Administrator || userPermissions.Has(guildPermission);
         }
 
         protected abstract Task<(bool Success, string Message)> CheckCustomPreconditionsAsync();

@@ -168,6 +168,8 @@ namespace CAVX.Bots.Framework.Services
             var newCommand = new SlashCommandBuilder();
             newCommand.WithName(action.SlashCommandProperties.Name);
             newCommand.WithDescription(action.SlashCommandProperties.Description);
+            if (action.RequiredAccessRule != null && action.RequiredAccessRule.PermissionType == ActionPermissionType.RequirePermission)
+                newCommand.WithDefaultMemberPermissions(action.RequiredAccessRule.RequiredPermission);
 
             var parameters = action.GetParameters<ActionParameterSlashAttribute>()?.OrderBy(p => p.Attribute.Order);
             if (parameters != null)

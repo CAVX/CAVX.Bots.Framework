@@ -26,7 +26,7 @@ namespace CAVX.Bots.Framework.Modules.Actions
 
         public override bool GuildsOnly => true;
 
-        public override GuildPermissions? RequiredPermissions => null;
+        public override ActionAccessRule RequiredAccessRule => null;
 
         readonly IServiceProvider _services;
         readonly IContextService _contextService;
