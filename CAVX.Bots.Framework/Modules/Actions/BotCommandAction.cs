@@ -53,7 +53,12 @@ namespace CAVX.Bots.Framework.Modules.Actions
                 if (val == null)
                     return default;
 
-                TCast ret = (TCast)Convert.ChangeType(val, type);
+                TCast ret;
+                if (val is IConvertible)
+                    ret = (TCast)Convert.ChangeType(val, type);
+                else
+                    ret = (TCast)(val ?? default);
+                
                 if (typeof(TCast) == typeof(string))
                     ret = (TCast)Convert.ChangeType(ret.ToString()?.Trim(), type);
 

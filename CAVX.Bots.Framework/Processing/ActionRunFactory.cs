@@ -86,7 +86,9 @@ namespace CAVX.Bots.Framework.Processing
 
             action.Initialize(_context);
 
-            if (_interaction is SocketInteraction si && _context is RequestInteractionContext ic)
+            bool skipDefer = action.GetType().GetCustomAttributes(false).OfType<ActionNoDeferAttribute>().ExistsWithItems();
+
+            if (_interaction is SocketInteraction si && _context is RequestInteractionContext ic && !skipDefer)
                 QueueDefer(action, si, ic);
             if (!await PopulateAndValidateParametersAsync(action))
                 return;

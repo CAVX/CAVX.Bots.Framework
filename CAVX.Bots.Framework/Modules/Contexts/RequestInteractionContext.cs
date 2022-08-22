@@ -1,4 +1,5 @@
 ﻿using Discord;
+using Discord.Interactions;
 using Discord.Net;
 using Discord.Rest;
 using Discord.WebSocket;
@@ -72,6 +73,33 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                 return null;
             }
         }
+        public async Task ReplyWithModelAsync(ModalBuilder modalBuilder)
+        {
+            await _acknowledgedLock.LockAsync(async () =>
+            {
+                bool initial = await GetInitialAsync(true);
+                var previousStatus = _acknowledgeStatus;
+
+                try
+                {
+                    await OriginalInteraction.RespondWithModalAsync(modalBuilder.Build());
+                    _acknowledgeStatus = RequestAcknowledgeStatus.Acknowledged;
+                    return;
+                }
+                catch (TimeoutException te)
+                {
+                    await _sendMessageQueueLock.LockAsync(async () =>
+                        await Channel.SendMessageAsync("It took me too long to process that! Sorry! Try again!"));
+                    return;
+                }
+                catch (HttpException e)
+                {
+                    await _sendMessageQueueLock.LockAsync(async () =>
+                        await Channel.SendMessageAsync("Something went wrong! Sorry! Try again!"));
+                    return;
+                }
+            });
+        }
 
         public override async Task<RestUserMessage> ReplyAsync(EphemeralRule ephemeralRule, string message = null, bool isTTS = false, FileAttachment[] attachments = null,
             Embed[] embeds = null, Embed embed = null, RequestOptions options = null, AllowedMentions allowedMentions = null, MessageReference messageReference = null,
@@ -85,7 +113,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                 bool initial = await GetInitialAsync(true);
                 var previousStatus = _acknowledgeStatus;
                 bool hasAttachments = attachments != null && attachments.Any();
-
+                
                 try
                 {
                     if (initial && previousStatus == RequestAcknowledgeStatus.NotAcknowledged)
