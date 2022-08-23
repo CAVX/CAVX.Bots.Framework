@@ -159,7 +159,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                                     mp.Embeds = embeds;
                                     mp.AllowedMentions = allowedMentions;
                                     mp.Components = components;
-                                    mp.Attachments = attachments;
+                                    mp.Attachments = attachments ?? new FileAttachment[] { };
                                 }, options);
                             }
                             catch (HttpException)
@@ -174,7 +174,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                                     mp.Embeds = embeds;
                                     mp.AllowedMentions = allowedMentions;
                                     mp.Components = components;
-                                    mp.Attachments = attachments;
+                                    mp.Attachments = attachments ?? new FileAttachment[] { };
                                 }, options);
                             }
                         }
@@ -280,7 +280,9 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                 {
                     try
                     {
-                        await (await OriginalInteraction?.GetOriginalResponseAsync())?.DeleteAsync();
+                        var response = await OriginalInteraction?.GetOriginalResponseAsync();
+                        if (response != null)
+                            await response.DeleteAsync();
                     }
                     catch { /*eh*/ }
                 }
