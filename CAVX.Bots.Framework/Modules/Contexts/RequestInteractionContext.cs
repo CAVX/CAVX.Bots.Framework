@@ -86,13 +86,13 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                     _acknowledgeStatus = RequestAcknowledgeStatus.Acknowledged;
                     return;
                 }
-                catch (TimeoutException te)
+                catch (TimeoutException)
                 {
                     await _sendMessageQueueLock.LockAsync(async () =>
                         await Channel.SendMessageAsync("It took me too long to process that! Sorry! Try again!"));
                     return;
                 }
-                catch (HttpException e)
+                catch (HttpException)
                 {
                     await _sendMessageQueueLock.LockAsync(async () =>
                         await Channel.SendMessageAsync("Something went wrong! Sorry! Try again!"));

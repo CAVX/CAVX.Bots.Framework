@@ -31,6 +31,8 @@ namespace CAVX.Bots.Framework.Processing
                 return new ActionUserRunFactory(actionService, context, userCommand);
             else if (interaction is SocketAutocompleteInteraction autocompleteInteraction)
                 return new ActionAutocompleteResponseFactory(actionService, context, autocompleteInteraction);
+            else if (interaction is SocketModal modalInteraction)
+                return new ActionModalResponseFactory(actionService, context, modalInteraction);
             else if (interaction is SocketMessageComponent component)
             {
                 if (component.Data.CustomId.StartsWith('#') || component.Data.CustomId.StartsWith('^')) //# = refresh component, ^ = refresh into new component
@@ -64,7 +66,9 @@ namespace CAVX.Bots.Framework.Processing
 
         protected abstract TAction GetAction();
         protected abstract Task PopulateParametersAsync(TAction action);
+        protected virtual bool ValidateParameters => true;
         protected abstract Task RunActionAsync(TAction action);
+
 
         public override async Task RunActionAsync()
         {
@@ -123,7 +127,7 @@ namespace CAVX.Bots.Framework.Processing
             try
             {
                 await PopulateParametersAsync(action);
-                if (!action.ValidateParameters<ActionParameterSlashAttribute>())
+                if (ValidateParameters && !action.ValidateParameters<ActionParameterSlashAttribute>())
                 {
                     await _context.ReplyAsync(EphemeralRule.EphemeralOrFallback, "Something went wrong - you didn't fill in a required option!").ConfigureAwait(false);
                     return false;
@@ -331,12 +335,8 @@ namespace CAVX.Bots.Framework.Processing
 
         protected override Task<bool> CheckPreconditionsAsync(BotCommandAction action) => Task.FromResult(true);
 
-        protected override Task PopulateParametersAsync(BotCommandAction action)
-        {
-            //if (action.SlashCommandProperties.FillParametersAsync != null)
-                //await action.SlashCommandProperties.FillParametersAsync(_interaction.Data.Options);
-            return Task.CompletedTask;
-        }
+        protected override bool ValidateParameters => false;
+        protected override Task PopulateParametersAsync(BotCommandAction action) => Task.CompletedTask;
 
         protected override async Task RunActionAsync(BotCommandAction action)
         {
@@ -346,6 +346,43 @@ namespace CAVX.Bots.Framework.Processing
                     await action.SlashCommandProperties.AutocompleteAsync[_interaction.Data.Current.Name](_interaction);
             }
             catch (TimeoutException) {  }
+        }
+    }
+
+    public class ActionModalResponseFactory : ActionRunFactory<SocketModal, BotCommandAction>
+    {
+        readonly string _modalCustomId;
+        readonly object[] _idOptions;
+
+        protected override string InteractionNameForLog => _interaction.Data.CustomId;
+
+        public ActionModalResponseFactory(ActionService actionService, RequestContext context, SocketModal interaction) : base(actionService, context, interaction)
+        {
+            var splitId = _interaction.Data.CustomId.Split('.');
+            _modalCustomId = splitId[0];
+            _idOptions = splitId.Skip(1).Cast<object>().ToArray();
+        }
+
+        protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.SlashCommandProperties != null && a.SlashCommandProperties.ModalOptions != null && a.SlashCommandProperties.ModalOptions.ContainsKey(_modalCustomId));
+
+        protected override Task<bool> CheckPreconditionsAsync(BotCommandAction action) => Task.FromResult(true);
+
+        protected override async Task PopulateParametersAsync(BotCommandAction action)
+        {
+            //await action.FillParametersAsync(selectOptions, _idOptions);
+            if (action.SlashCommandProperties.ModalOptions.ContainsKey(_modalCustomId))
+                await action.SlashCommandProperties.ModalOptions[_modalCustomId].FillParametersAsync(_idOptions);
+        }
+
+
+        protected override async Task RunActionAsync(BotCommandAction action)
+        {
+            try
+            {
+                if (action.SlashCommandProperties.ModalOptions.ContainsKey(_modalCustomId))
+                    await action.SlashCommandProperties.ModalOptions[_modalCustomId].ModalCompleteAsync(_interaction);
+            }
+            catch (TimeoutException) { }
         }
     }
 
