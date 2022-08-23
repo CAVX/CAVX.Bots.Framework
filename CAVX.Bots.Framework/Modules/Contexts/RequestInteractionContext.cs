@@ -246,7 +246,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                         }
 
                         var message = await OriginalInteraction.GetOriginalResponseAsync();
-                        await message.ModifyAsync(propBuilder);
+                        await message?.ModifyAsync(propBuilder);
                     }
                 }
                 catch (HttpException e)

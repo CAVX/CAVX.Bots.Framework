@@ -14,6 +14,7 @@ using CAVX.Bots.Framework.Services;
 using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Extensions;
 using System.Threading;
+using System.Reflection.Metadata;
 
 namespace CAVX.Bots.Framework.Processing
 {
@@ -35,7 +36,7 @@ namespace CAVX.Bots.Framework.Processing
                 return new ActionModalResponseFactory(actionService, context, modalInteraction);
             else if (interaction is SocketMessageComponent component)
             {
-                if (component.Data.CustomId.StartsWith('#') || component.Data.CustomId.StartsWith('^')) //# = refresh component, ^ = refresh into new component
+                if (component.Data.CustomId.StartsWith('#') || component.Data.CustomId.StartsWith('^') || component.Data.CustomId.StartsWith('&')) //# = refresh component, ^ = refresh into new component, & = refresh both (separately)
                     return new ActionRefreshRunFactory(actionService, context, component);
                 else
                     return new ActionComponentRunFactory(actionService, context, component);
@@ -238,11 +239,27 @@ namespace CAVX.Bots.Framework.Processing
         }
     }
 
+    public enum ActionRefreshTargetMessage
+    {
+        Old,
+        New
+    }
+
+    public class ActionRefreshMessagePartCollection
+    {
+        public ActionRefreshTargetMessage Target { get; set; }
+        public Optional<string> Message { get; set; }
+        public Optional<Embed[]> Embeds { get; set; }
+        public Optional<MessageComponent> Components { get; set; }
+        public Optional<MessageResultCode> ResultCode { get; set; }
+    }
+
     public class ActionRefreshRunFactory : ActionRunFactory<SocketMessageComponent, BotCommandAction>
     {
+
         readonly string _commandTypeName;
         readonly object[] _idOptions;
-        readonly bool _intoNew = false;
+        readonly ActionRefreshTargetMessage[] _targets;
 
         protected override string InteractionNameForLog => _interaction.Data.CustomId;
 
@@ -251,8 +268,13 @@ namespace CAVX.Bots.Framework.Processing
             if (string.IsNullOrWhiteSpace(_interaction.Data.CustomId))
                 throw new CommandInvalidException();
 
-            //# = refresh component, ^ = refresh into new component
-            _intoNew = interaction.Data.CustomId.First() == '^';
+            //# = refresh component, ^ = refresh into new component, & = refresh both (separately)
+            _targets = interaction.Data.CustomId.First() switch
+            {
+                '^' => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.New },
+                '&' => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.Old, ActionRefreshTargetMessage.New },
+                _   => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.Old }
+            };
 
             var splitId = interaction.Data.CustomId[1..].Split('.');
             _commandTypeName = splitId[0];
@@ -272,23 +294,31 @@ namespace CAVX.Bots.Framework.Processing
 
         protected override async Task RunActionAsync(BotCommandAction action)
         {
-            var (Success, Message) = await action.CommandRefreshProperties.CanRefreshAsync(_intoNew);
+            var (Success, Message) = await action.CommandRefreshProperties.CanRefreshAsync(_targets);
             if (!Success)
             {
                 await _context.ReplyAsync(true, Message);
                 return;
             }
 
-            if (_intoNew)
+            var parts = await action.CommandRefreshProperties.RefreshAsync(_targets);
+            foreach (var part in parts)
             {
-                var props = new MessageProperties();
-                await action.CommandRefreshProperties.RefreshAsync(_intoNew, props);
-                await _context.ReplyAsync(action.EphemeralRule.ToEphemeral() ? EphemeralRule.EphemeralOrFail : EphemeralRule.Permanent, props.Content.GetValueOrDefault(), embed: props.Embed.GetValueOrDefault(), embeds: props.Embeds.GetValueOrDefault(),
-                    allowedMentions: props.AllowedMentions.GetValueOrDefault(), components: props.Components.GetValueOrDefault());
-            }
-            else
-            {
-                await _context.UpdateReplyAsync(msgProps => action.CommandRefreshProperties.RefreshAsync(_intoNew, msgProps).GetAwaiter().GetResult());
+                if (part.Target == ActionRefreshTargetMessage.Old) //must be first?
+                {
+                    await _context.UpdateReplyAsync(msgProps =>
+                    {
+                        msgProps.Content = part.Message;
+                        msgProps.Embeds = part.Embeds;
+                        msgProps.Components = part.Components;
+                    });
+                }
+                else if (part.Target == ActionRefreshTargetMessage.New)
+                {
+                    var props = new MessageProperties() { Content = part.Message, Embeds = part.Embeds, Components = part.Components };
+                    await _context.ReplyAsync(action.EphemeralRule.ToEphemeral() ? EphemeralRule.EphemeralOrFail : EphemeralRule.Permanent, props.Content.GetValueOrDefault(), embed: props.Embed.GetValueOrDefault(), embeds: props.Embeds.GetValueOrDefault(),
+                        allowedMentions: props.AllowedMentions.GetValueOrDefault(), components: props.Components.GetValueOrDefault());
+                }
             }
         }
     }
