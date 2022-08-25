@@ -269,14 +269,27 @@ namespace CAVX.Bots.Framework.Processing
                 throw new CommandInvalidException();
 
             //# = refresh component, ^ = refresh into new component, & = refresh both (separately)
-            _targets = interaction.Data.CustomId.First() switch
+            //these chars can repeat to allow for unique custom IDs.
+            char matchChar = interaction.Data.CustomId.First();
+            _targets = matchChar switch
             {
                 '^' => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.New },
                 '&' => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.Old, ActionRefreshTargetMessage.New },
-                _   => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.Old }
+                '#' => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.Old },
+                _ => throw new NotImplementedException()
             };
 
-            var splitId = interaction.Data.CustomId[1..].Split('.');
+            var customId = interaction.Data.CustomId;
+            string[] splitId = Array.Empty<string>();
+            for (int i = 1; i < customId.Length; i++)
+            {
+                if (matchChar != customId[i])
+                {
+                    splitId = customId[i..].Split('.');
+                    break;
+                }
+            }
+
             _commandTypeName = splitId[0];
             _idOptions = splitId.Skip(1).Cast<object>().ToArray();
         }
@@ -335,7 +348,6 @@ namespace CAVX.Bots.Framework.Processing
             if (string.IsNullOrWhiteSpace(_interaction.Data.CustomId))
                 throw new CommandInvalidException();
 
-            //# = refresh component, ^ = refresh into new component
             var splitId = _interaction.Data.CustomId.Split('.');
             _commandTypeName = splitId[0];
             _idOptions = splitId.Skip(1).Cast<object>().ToArray();
