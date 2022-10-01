@@ -85,7 +85,7 @@ namespace CAVX.Bots.Framework.Modules
             var actionService = services.GetRequiredService<ActionService>();
 
             var context = new RequestCommandContext(commandContext as SocketCommandContext);
-            var actionRunFactory = ActionRunFactory.Find(actionService, context, commandInfo, parmValues);
+            var actionRunFactory = ActionRunFactory.Find(services, actionService, context, commandInfo, parmValues);
             if (actionRunFactory != null)
                 await actionRunFactory.RunActionAsync();
         }

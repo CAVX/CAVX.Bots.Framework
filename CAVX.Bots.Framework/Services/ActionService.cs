@@ -313,7 +313,7 @@ namespace CAVX.Bots.Framework.Services
         private async Task Client_InteractionCreated(SocketInteraction arg)
         {
             var context = new RequestInteractionContext(arg, _discord);
-            var actionRunFactory = ActionRunFactory.Find(this, context, arg);
+            var actionRunFactory = ActionRunFactory.Find(_services, this, context, arg);
             if (actionRunFactory != null)
                 await actionRunFactory.RunActionAsync();
         }

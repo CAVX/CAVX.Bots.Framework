@@ -15,6 +15,8 @@ using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Extensions;
 using System.Threading;
 using System.Reflection.Metadata;
+using static System.Collections.Specialized.BitVector32;
+using ScottPlot.Renderable;
 
 namespace CAVX.Bots.Framework.Processing
 {
@@ -22,41 +24,43 @@ namespace CAVX.Bots.Framework.Processing
     {
         public abstract Task RunActionAsync();
 
-        public static ActionRunFactory Find(ActionService actionService, RequestContext context, SocketInteraction interaction)
+        public static ActionRunFactory Find(IServiceProvider services, ActionService actionService, RequestContext context, SocketInteraction interaction)
         {
             if (interaction is SocketSlashCommand slashCommand)
-                return new ActionSlashRunFactory(actionService, context, slashCommand);
+                return new ActionSlashRunFactory(services, actionService, context, slashCommand);
             else if (interaction is SocketMessageCommand msgCommand)
-                return new ActionMessageRunFactory(actionService, context, msgCommand);
+                return new ActionMessageRunFactory(services, actionService, context, msgCommand);
             else if (interaction is SocketUserCommand userCommand)
-                return new ActionUserRunFactory(actionService, context, userCommand);
+                return new ActionUserRunFactory(services, actionService, context, userCommand);
             else if (interaction is SocketAutocompleteInteraction autocompleteInteraction)
-                return new ActionAutocompleteResponseFactory(actionService, context, autocompleteInteraction);
+                return new ActionAutocompleteResponseFactory(services, actionService, context, autocompleteInteraction);
             else if (interaction is SocketModal modalInteraction)
-                return new ActionModalResponseFactory(actionService, context, modalInteraction);
+                return new ActionModalResponseFactory(services, actionService, context, modalInteraction);
             else if (interaction is SocketMessageComponent component)
             {
                 if (component.Data.CustomId.StartsWith('#') || component.Data.CustomId.StartsWith('^') || component.Data.CustomId.StartsWith('&')) //# = refresh component, ^ = refresh into new component, & = refresh both (separately)
-                    return new ActionRefreshRunFactory(actionService, context, component);
+                    return new ActionRefreshRunFactory(services, actionService, context, component);
                 else
-                    return new ActionComponentRunFactory(actionService, context, component);
+                    return new ActionComponentRunFactory(services, actionService, context, component);
             }
 
             return null;
         }
 
-        public static ActionRunFactory Find(ActionService actionService, RequestContext context, CommandInfo commandInfo, object[] parmValues) => new ActionTextRunFactory(actionService, context, commandInfo, parmValues);
+        public static ActionRunFactory Find(IServiceProvider services, ActionService actionService, RequestContext context, CommandInfo commandInfo, object[] parmValues) => new ActionTextRunFactory(services, actionService, context, commandInfo, parmValues);
     }
 
 
     public abstract class ActionRunFactory<TInteraction, TAction> : ActionRunFactory where TInteraction : class where TAction : BotAction
     {
+        protected IServiceProvider _services;
         protected TInteraction _interaction;
         protected RequestContext _context;
         protected ActionService _actionService;
 
-        public ActionRunFactory(ActionService actionService, RequestContext context, TInteraction interaction)
+        public ActionRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, TInteraction interaction)
         {
+            _services = services;
             _context = context;
             _interaction = interaction;
 
@@ -183,7 +187,7 @@ namespace CAVX.Bots.Framework.Processing
     {
         protected override string InteractionNameForLog => _interaction.Data.Name;
 
-        public ActionSlashRunFactory(ActionService actionService, RequestContext context, SocketSlashCommand interaction) : base(actionService, context, interaction) { }
+        public ActionSlashRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketSlashCommand interaction) : base(services, actionService, context, interaction) { }
 
         protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.SlashCommandProperties != null && a.SlashCommandProperties.Name == _interaction.Data.Name);
 
@@ -203,7 +207,7 @@ namespace CAVX.Bots.Framework.Processing
     {
         protected override string InteractionNameForLog => _interaction.Data.Name;
 
-        public ActionMessageRunFactory(ActionService actionService, RequestContext context, SocketMessageCommand interaction) : base(actionService, context, interaction) { }
+        public ActionMessageRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketMessageCommand interaction) : base(services, actionService, context, interaction) { }
 
         protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.MessageCommandProperties != null && a.MessageCommandProperties.Name == _interaction.Data.Name);
 
@@ -223,7 +227,7 @@ namespace CAVX.Bots.Framework.Processing
     {
         protected override string InteractionNameForLog => _interaction.Data.Name;
 
-        public ActionUserRunFactory(ActionService actionService, RequestContext context, SocketUserCommand interaction) : base(actionService, context, interaction) { }
+        public ActionUserRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketUserCommand interaction) : base(services, actionService, context, interaction) { }
 
         protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.UserCommandProperties != null && a.UserCommandProperties.Name == _interaction.Data.Name);
 
@@ -245,13 +249,65 @@ namespace CAVX.Bots.Framework.Processing
         New
     }
 
-    public class ActionRefreshMessagePartCollection
+    public interface IActionRefreshMessageParts
+    {
+        ActionRefreshTargetMessage Target { get; set; }
+        public Task RefreshAsync(IServiceProvider services, RequestContext context, EphemeralRule ephemeralRule);
+    }
+
+
+    public class ActionRefreshMessagePartCollection : IActionRefreshMessageParts
     {
         public ActionRefreshTargetMessage Target { get; set; }
         public Optional<string> Message { get; set; }
         public Optional<Embed[]> Embeds { get; set; }
         public Optional<MessageComponent> Components { get; set; }
         public Optional<MessageResultCode> ResultCode { get; set; }
+
+        public async Task RefreshAsync(IServiceProvider services, RequestContext context, EphemeralRule ephemeralRule)
+        {
+            if (Target == ActionRefreshTargetMessage.Old) //must be first?
+            {
+                await context.UpdateReplyAsync(msgProps =>
+                {
+                    msgProps.Content = Message;
+                    msgProps.Embeds = Embeds;
+                    msgProps.Components = Components;
+                });
+            }
+            else if (Target == ActionRefreshTargetMessage.New)
+            {
+                var props = new MessageProperties() { Content = Message, Embeds = Embeds, Components = Components };
+                await context.ReplyAsync(ephemeralRule.ToEphemeral() ? EphemeralRule.EphemeralOrFail : EphemeralRule.Permanent, props.Content.GetValueOrDefault(), embed: props.Embed.GetValueOrDefault(), embeds: props.Embeds.GetValueOrDefault(),
+                    allowedMentions: props.AllowedMentions.GetValueOrDefault(), components: props.Components.GetValueOrDefault());
+            }
+        }
+    }
+
+    public class ActionRefreshMessagePartBuilder : IActionRefreshMessageParts
+    {
+        public ActionRefreshTargetMessage Target { get; set; } = ActionRefreshTargetMessage.New;
+        public Optional<string> UpdateMessage { get; set; }
+        public Optional<Embed[]> UpdateEmbeds { get; set; }
+        public Optional<MessageComponent> UpdateComponents { get; set; }
+        public IMessageBuilder MessageBuilder { get; set; }
+
+        public async Task RefreshAsync(IServiceProvider services, RequestContext context, EphemeralRule ephemeralRule)
+        {
+            if (Target == ActionRefreshTargetMessage.Old) //must be first?
+            {
+                await context.UpdateReplyAsync(msgProps =>
+                {
+                    msgProps.Content = UpdateMessage;
+                    msgProps.Embeds = UpdateEmbeds;
+                    msgProps.Components = UpdateComponents;
+                });
+            }
+            else if (Target == ActionRefreshTargetMessage.New)
+            {
+                await context.ReplyBuilderAsync(services, MessageBuilder, ephemeralRule.ToEphemeral());
+            }
+        }
     }
 
     public class ActionRefreshRunFactory : ActionRunFactory<SocketMessageComponent, BotCommandAction>
@@ -263,7 +319,7 @@ namespace CAVX.Bots.Framework.Processing
 
         protected override string InteractionNameForLog => _interaction.Data.CustomId;
 
-        public ActionRefreshRunFactory(ActionService actionService, RequestContext context, SocketMessageComponent interaction) : base(actionService, context, interaction)
+        public ActionRefreshRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketMessageComponent interaction) : base(services, actionService, context, interaction)
         {
             if (string.IsNullOrWhiteSpace(_interaction.Data.CustomId))
                 throw new CommandInvalidException();
@@ -316,23 +372,7 @@ namespace CAVX.Bots.Framework.Processing
 
             var parts = await action.CommandRefreshProperties.RefreshAsync(_targets);
             foreach (var part in parts)
-            {
-                if (part.Target == ActionRefreshTargetMessage.Old) //must be first?
-                {
-                    await _context.UpdateReplyAsync(msgProps =>
-                    {
-                        msgProps.Content = part.Message;
-                        msgProps.Embeds = part.Embeds;
-                        msgProps.Components = part.Components;
-                    });
-                }
-                else if (part.Target == ActionRefreshTargetMessage.New)
-                {
-                    var props = new MessageProperties() { Content = part.Message, Embeds = part.Embeds, Components = part.Components };
-                    await _context.ReplyAsync(action.EphemeralRule.ToEphemeral() ? EphemeralRule.EphemeralOrFail : EphemeralRule.Permanent, props.Content.GetValueOrDefault(), embed: props.Embed.GetValueOrDefault(), embeds: props.Embeds.GetValueOrDefault(),
-                        allowedMentions: props.AllowedMentions.GetValueOrDefault(), components: props.Components.GetValueOrDefault());
-                }
-            }
+                await part.RefreshAsync(_services, _context, action.EphemeralRule);
         }
     }
 
@@ -343,7 +383,7 @@ namespace CAVX.Bots.Framework.Processing
 
         protected override string InteractionNameForLog => _interaction.Data.CustomId;
 
-        public ActionComponentRunFactory(ActionService actionService, RequestContext context, SocketMessageComponent interaction) : base(actionService, context, interaction)
+        public ActionComponentRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketMessageComponent interaction) : base(services, actionService, context, interaction)
         {
             if (string.IsNullOrWhiteSpace(_interaction.Data.CustomId))
                 throw new CommandInvalidException();
@@ -371,7 +411,7 @@ namespace CAVX.Bots.Framework.Processing
     {
         protected override string InteractionNameForLog => _interaction.Data.CommandName;
 
-        public ActionAutocompleteResponseFactory(ActionService actionService, RequestContext context, SocketAutocompleteInteraction interaction) : base(actionService, context, interaction) { }
+        public ActionAutocompleteResponseFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketAutocompleteInteraction interaction) : base(services, actionService, context, interaction) { }
 
         protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.SlashCommandProperties != null && a.SlashCommandProperties.AutocompleteAsync != null && a.SlashCommandProperties.Name == _interaction.Data.CommandName);
 
@@ -398,7 +438,7 @@ namespace CAVX.Bots.Framework.Processing
 
         protected override string InteractionNameForLog => _interaction.Data.CustomId;
 
-        public ActionModalResponseFactory(ActionService actionService, RequestContext context, SocketModal interaction) : base(actionService, context, interaction)
+        public ActionModalResponseFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketModal interaction) : base(services, actionService, context, interaction)
         {
             var splitId = _interaction.Data.CustomId.Split('.');
             _modalCustomId = splitId[0];
@@ -434,7 +474,7 @@ namespace CAVX.Bots.Framework.Processing
         ActionTextCommandProperties _textProperties;
         protected override string InteractionNameForLog => _interaction.Name;
 
-        public ActionTextRunFactory(ActionService actionService, RequestContext context, CommandInfo commandInfo, object[] parmValues) : base(actionService, context, commandInfo) { _parmValues = parmValues; }
+        public ActionTextRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, CommandInfo commandInfo, object[] parmValues) : base(services, actionService, context, commandInfo) { _parmValues = parmValues; }
 
         protected override BotCommandAction GetAction()
         {

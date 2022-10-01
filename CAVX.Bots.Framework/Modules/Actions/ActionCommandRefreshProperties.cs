@@ -10,6 +10,6 @@ namespace CAVX.Bots.Framework.Modules.Actions
     {
         public Func<string[], object[], Task> FillParametersAsync { get; set; }
         public Func<ActionRefreshTargetMessage[], Task<(bool, string)>> CanRefreshAsync { get; set; }
-        public Func<ActionRefreshTargetMessage[], Task<List<ActionRefreshMessagePartCollection>>> RefreshAsync { get; set; }
+        public Func<ActionRefreshTargetMessage[], Task<List<IActionRefreshMessageParts>>> RefreshAsync { get; set; }
     }
 }
