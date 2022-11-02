@@ -43,7 +43,7 @@ namespace CAVX.Bots.Framework.Utilities
 
         public (bool Success, T Value) TryPop()
         {
-            int randomWeight = ThreadSafeRandom.ThisThreadsRandom.Next(_list[1].TotalWeight);
+            int randomWeight = Random.Shared.Next(_list[1].TotalWeight);
             int i = 1;
 
             while (randomWeight >= _list[i].Weight)

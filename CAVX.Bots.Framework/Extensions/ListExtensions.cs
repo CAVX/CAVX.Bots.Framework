@@ -26,10 +26,8 @@ namespace CAVX.Bots.Framework.Extensions
             while (count > 1)
             {
                 count--;
-                int k = ThreadSafeRandom.ThisThreadsRandom.Next(count + 1);
-                T value = list[k];
-                list[k] = list[count];
-                list[count] = value;
+                int k = Random.Shared.Next(count + 1);
+                (list[count], list[k]) = (list[k], list[count]);
             }
 
             return list;
@@ -135,9 +133,7 @@ namespace CAVX.Bots.Framework.Extensions
         {
             if (i == j)   //This check is not required but Partition function may make many calls so its for perf reason
                 return;
-            var temp = list[i];
-            list[i] = list[j];
-            list[j] = temp;
+            (list[j], list[i]) = (list[i], list[j]);
         }
 
         /// <summary>
