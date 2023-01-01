@@ -8,10 +8,11 @@ using System.Threading.Tasks;
 using CAVX.Bots.Framework.Modules.Actions.Attributes;
 using CAVX.Bots.Framework.Modules.Contexts;
 using CAVX.Bots.Framework.Models;
+using CAVX.Bots.Framework.Processing;
 
 namespace CAVX.Bots.Framework.Modules.Actions
 {
-    public abstract class BotAction
+    public abstract class BotAction : IBotAction
     {
         public RequestContext Context { get; set; }
         public void Initialize(RequestContext context)
@@ -20,18 +21,17 @@ namespace CAVX.Bots.Framework.Modules.Actions
         }
 
         public abstract EphemeralRule EphemeralRule { get; }
-        public abstract bool GuildsOnly { get; }
+        public abstract bool RestrictAccessToGuilds { get; }
+        public abstract bool ConditionalGuildsOnly { get; }
         public abstract ActionAccessRule RequiredAccessRule { get; }
 
-        public bool ValidateParameters<T>(string filterCommandName = null) where T : IActionParameterAttribute
+        public bool ValidateParameters<T>() where T : IActionParameterAttribute
         {
             //Required check (all we have right now)
-            var parameterProperties = GetType().GetProperties().SelectMany(p => p.GetCustomAttributes(false).OfType<T>().Select(a => new { Property = p, Attribute = a }))?.Where(p => p.Attribute.Required && (p.Attribute is not ActionParameterSlashAttribute apsa || apsa.ParentNames == null || !apsa.ParentNames.Any())); //for now, don't worry about validating child properties.
+            var parameterProperties = GetType().GetProperties().SelectMany(p => p.GetCustomAttributes(false).OfType<T>().Select(a => new { Property = p, Attribute = a }))?.Where(p => p.Attribute.Required);
 
             if (parameterProperties == null || !parameterProperties.Any())
                 return true;
-            if (!string.IsNullOrWhiteSpace(filterCommandName))
-                parameterProperties = parameterProperties.Where(p => p.Attribute.FilterCommandNames == null || p.Attribute.FilterCommandNames.Contains(filterCommandName));
 
             foreach (var p in parameterProperties)
             {
@@ -43,19 +43,17 @@ namespace CAVX.Bots.Framework.Modules.Actions
             return true;
         }
 
-        public IEnumerable<(PropertyInfo Property, T Attribute)> GetParameters<T>(string filterCommandName = null) where T : IActionParameterAttribute
+        public IEnumerable<(PropertyInfo Property, T Attribute)> GetParameters<T>() where T : IActionParameterAttribute
         {
             var parameterProperties = GetType().GetProperties().SelectMany(p => p.GetCustomAttributes(false).OfType<T>().Select(a => (Property: p, Attribute: a)));
 
             if (parameterProperties == null || !parameterProperties.Any())
                 return null;
-            if (!string.IsNullOrWhiteSpace(filterCommandName))
-                parameterProperties = parameterProperties.Where(p => p.Attribute.FilterCommandNames == null || p.Attribute.FilterCommandNames.Contains(filterCommandName));
 
             return parameterProperties;
         }
 
-        public async Task<(bool Success, string Message)> CheckPreconditionsAsync()
+        public async Task<(bool Success, string Message)> CheckPreconditionsAsync(ActionRunContext runContext)
         {
             if (RequiredAccessRule != null)
             {
@@ -72,7 +70,7 @@ namespace CAVX.Bots.Framework.Modules.Actions
                 }
             }
 
-            return await CheckCustomPreconditionsAsync();
+            return await CheckCustomPreconditionsAsync(runContext);
         }
 
         protected bool HasCorrectPermissions(IGuildUser user, GuildPermission guildPermission)
@@ -82,13 +80,13 @@ namespace CAVX.Bots.Framework.Modules.Actions
             return userPermissions.Administrator || userPermissions.Has(guildPermission);
         }
 
-        protected abstract Task<(bool Success, string Message)> CheckCustomPreconditionsAsync();
+        protected abstract Task<(bool Success, string Message)> CheckCustomPreconditionsAsync(ActionRunContext runContext);
 
-        public abstract Task RunAsync();
+        public abstract Task RunAsync(ActionRunContext runContext);
 
         public (bool Success, string Message) IsCommandAllowedInGuild()
         {
-            if (GuildsOnly && Context.Channel is IDMChannel)
+            if (RestrictAccessToGuilds && Context.Channel is IDMChannel)
                 return (false, $"You can't do that here! Find a server that I'm in, instead!");
 
             return (true, null);

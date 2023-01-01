@@ -1,20 +1,16 @@
 ﻿using Discord;
-using Discord.WebSocket;
-using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using CAVX.Bots.Framework.Extensions;
 using CAVX.Bots.Framework.Modules.Actions.Attributes;
-using CAVX.Bots.Framework.Modules.Contexts;
 using CAVX.Bots.Framework.Services;
-using CAVX.Bots.Framework.TypeReaders;
 using CAVX.Bots.Framework.Models;
+using CAVX.Bots.Framework.Processing;
 
 namespace CAVX.Bots.Framework.Modules.Actions
 {
-    public class Collector : BotComponentAction
+    public class Collector : BotAction, IActionComponent
     {
         [ActionParameterComponent(Order = 1, Name = "idParams", Description = "Any additional parameters passed in from the message component's custom ID.", Required = false)]
         public object[] IdParams { get; set; } = null;
@@ -22,10 +18,17 @@ namespace CAVX.Bots.Framework.Modules.Actions
         [ActionParameterComponent(Order = 2, Name = "selectParams", Description = "Any additional parameters passed in from the message component's select box.", Required = false)]
         public object[] SelectParams { get; set; } = null;
 
+        public Task FillComponentParametersAsync(string[] selectOptions, object[] idOptions)
+        {
+            IdParams = idOptions;
+            SelectParams = selectOptions;
+
+            return Task.CompletedTask;
+        }
+
         public override EphemeralRule EphemeralRule => EphemeralRule.EphemeralOrFail;
-
-        public override bool GuildsOnly => true;
-
+        public override bool RestrictAccessToGuilds => true;
+        public override bool ConditionalGuildsOnly => false;
         public override ActionAccessRule RequiredAccessRule => null;
 
         readonly IServiceProvider _services;
@@ -39,22 +42,14 @@ namespace CAVX.Bots.Framework.Modules.Actions
             _actionService = actionService;
         }
 
-        public override Task FillParametersAsync(string[] selectOptions, object[] idOptions)
-        {
-            IdParams = idOptions;
-            SelectParams = selectOptions;
-
-            return Task.CompletedTask;
-        }
-
-        protected override Task<(bool Success, string Message)> CheckCustomPreconditionsAsync()
+        protected override Task<(bool Success, string Message)> CheckCustomPreconditionsAsync(ActionRunContext runContext)
         {
             _contextService.AddContext(Context);
 
             return Task.FromResult((true, (string)null));
         }
 
-        public override async Task RunAsync()
+        public override async Task RunAsync(ActionRunContext runContext)
         {
             IUser userData = Context.User;
             if (userData == null)

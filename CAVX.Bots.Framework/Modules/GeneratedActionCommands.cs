@@ -35,48 +35,46 @@ namespace CAVX.Bots.Framework.Modules
             using var scope = ServiceProvider.CreateScope();
 
             //Get phrases from items as aliases for the referenced command.
-            foreach (var action in ActionService.GetAll().OfType<BotCommandAction>().Where(s => s.TextCommandProperties != null))
+            foreach (var action in ActionService.GetAll().OfType<IActionText>())
             {
-                foreach (var textProperties in action.TextCommandProperties)
-                {
-                    builder.AddCommand(textProperties.Name, RunActionFromTextCommand,
-                        builder =>
+                builder.AddCommand(action.CommandName, RunActionFromTextCommand,
+                    async builder =>
+                    {
+                        if (action.CommandAliases != null)
+                            builder.AddAliases(action.CommandAliases.ToArray());
+                        builder.Summary = action.CommandHelpSummary;
+                        if (action.RestrictAccessToGuilds)
+                            builder.AddPrecondition(new RequireContextAttribute(ContextType.Guild));
+                        if (action.RequiredAccessRule != null)
                         {
-                            if (textProperties.Aliases != null)
-                                builder.AddAliases(textProperties.Aliases.ToArray());
-                            builder.Summary = textProperties.Summary;
-                            if (action.GuildsOnly)
-                                builder.AddPrecondition(new RequireContextAttribute(ContextType.Guild));
-                            if (action.RequiredAccessRule != null)
-                            {
-                                if (action.RequiredAccessRule.PermissionType == Models.ActionPermissionType.RequireOwner)
-                                    builder.AddPrecondition(new RequireOwnerAttribute());
-                                else if (action.RequiredAccessRule.PermissionType == Models.ActionPermissionType.RequirePermission && action.RequiredAccessRule.RequiredPermission.HasValue)
-                                    builder.AddPrecondition(new RequireUserPermissionAttribute(action.RequiredAccessRule.RequiredPermission.Value));
-                            }
-                            if (textProperties.Priority.HasValue)
-                                builder.Priority = textProperties.Priority.Value;
-
-                            var parameters = action.GetParameters<ActionParameterTextAttribute>()?.Where(p => p.Attribute.FilterCommandNames == null || p.Attribute.FilterCommandNames.Contains(textProperties.Name)).OrderBy(p => p.Attribute.Order);
-                            if (parameters != null)
-                            {
-                                foreach (var p in parameters)
-                                {
-                                    builder.AddParameter(p.Attribute.Name, p.Attribute.ParameterType, pb =>
-                                    {
-                                        pb.Summary = p.Attribute.Description;
-                                        pb.IsMultiple = p.Attribute.IsMultiple;
-                                        pb.IsRemainder = p.Attribute.IsRemainder;
-                                        pb.DefaultValue = p.Attribute.DefaultValue;
-                                        pb.IsOptional = !p.Attribute.Required;
-                                    });
-                                }
-                            }
-
-                            textProperties.ModifyBuilder?.Invoke(scope.ServiceProvider, builder);
+                            if (action.RequiredAccessRule.PermissionType == Models.ActionPermissionType.RequireOwner)
+                                builder.AddPrecondition(new RequireOwnerAttribute());
+                            else if (action.RequiredAccessRule.PermissionType == Models.ActionPermissionType.RequirePermission && action.RequiredAccessRule.RequiredPermission.HasValue)
+                                builder.AddPrecondition(new RequireUserPermissionAttribute(action.RequiredAccessRule.RequiredPermission.Value));
                         }
-                    );
-                }
+                        if (action.TextParserPriority.HasValue)
+                            builder.Priority = action.TextParserPriority.Value;
+
+                        var parameters = action.GetParameters<ActionParameterTextAttribute>()?.OrderBy(p => p.Attribute.Order);
+                        if (parameters != null)
+                        {
+                            foreach (var p in parameters)
+                            {
+                                builder.AddParameter(p.Attribute.Name, p.Attribute.ParameterType, pb =>
+                                {
+                                    pb.Summary = p.Attribute.Description;
+                                    pb.IsMultiple = p.Attribute.IsMultiple;
+                                    pb.IsRemainder = p.Attribute.IsRemainder;
+                                    pb.DefaultValue = p.Attribute.DefaultValue;
+                                    pb.IsOptional = !p.Attribute.Required;
+                                });
+                            }
+                        }
+
+                        if (action is IActionTextModifyBuilder mbAction)
+                            await mbAction.ModifyBuilderAsync(scope.ServiceProvider, builder);
+                    }
+                );
             }
         }
 

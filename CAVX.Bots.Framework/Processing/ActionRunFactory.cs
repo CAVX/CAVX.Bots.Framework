@@ -1,7 +1,5 @@
-﻿using Discord;
-using Discord.Commands;
+﻿using Discord.Commands;
 using Discord.WebSocket;
-using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,9 +12,7 @@ using CAVX.Bots.Framework.Services;
 using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Extensions;
 using System.Threading;
-using System.Reflection.Metadata;
-using static System.Collections.Specialized.BitVector32;
-using ScottPlot.Renderable;
+using Discord;
 
 namespace CAVX.Bots.Framework.Processing
 {
@@ -37,12 +33,7 @@ namespace CAVX.Bots.Framework.Processing
             else if (interaction is SocketModal modalInteraction)
                 return new ActionModalResponseFactory(services, actionService, context, modalInteraction);
             else if (interaction is SocketMessageComponent component)
-            {
-                if (component.Data.CustomId.StartsWith('#') || component.Data.CustomId.StartsWith('^') || component.Data.CustomId.StartsWith('&')) //# = refresh component, ^ = refresh into new component, & = refresh both (separately)
-                    return new ActionRefreshRunFactory(services, actionService, context, component);
-                else
                     return new ActionComponentRunFactory(services, actionService, context, component);
-            }
 
             return null;
         }
@@ -51,7 +42,7 @@ namespace CAVX.Bots.Framework.Processing
     }
 
 
-    public abstract class ActionRunFactory<TInteraction, TAction> : ActionRunFactory where TInteraction : class where TAction : BotAction
+    public abstract class ActionRunFactory<TInteraction, TAction> : ActionRunFactory where TInteraction : class where TAction : IBotAction
     {
         protected IServiceProvider _services;
         protected TInteraction _interaction;
@@ -68,11 +59,15 @@ namespace CAVX.Bots.Framework.Processing
         }
 
         protected abstract string InteractionNameForLog { get; }
+        protected virtual ActionRunContext RunContext => ActionRunContext.None;
 
         protected abstract TAction GetAction();
         protected abstract Task PopulateParametersAsync(TAction action);
         protected virtual bool ValidateParameters => true;
-        protected abstract Task RunActionAsync(TAction action);
+        protected virtual async Task RunActionAsync(TAction action)
+        {
+            await action.RunAsync(RunContext);
+        }
 
 
         public override async Task RunActionAsync()
@@ -155,7 +150,7 @@ namespace CAVX.Bots.Framework.Processing
 
         protected virtual async Task<bool> CheckPreconditionsAsync(TAction action)
         {
-            var (Success, Message) = await action.CheckPreconditionsAsync();
+            var (Success, Message) = await action.CheckPreconditionsAsync(RunContext);
             if (!Success)
             {
                 await _context.ReplyAsync(EphemeralRule.EphemeralOrFallback, Message ?? "Something went wrong with using this command!").ConfigureAwait(false);
@@ -183,258 +178,124 @@ namespace CAVX.Bots.Framework.Processing
         }
     }
 
-    public class ActionSlashRunFactory : ActionRunFactory<SocketSlashCommand, BotCommandAction>
+    public class ActionSlashRunFactory : ActionRunFactory<SocketSlashCommand, IActionSlash>
     {
+        private IEnumerable<SocketSlashCommandDataOption> _subOptions;
+
         protected override string InteractionNameForLog => _interaction.Data.Name;
+        protected override ActionRunContext RunContext => ActionRunContext.Slash;
 
         public ActionSlashRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketSlashCommand interaction) : base(services, actionService, context, interaction) { }
 
-        protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.SlashCommandProperties != null && a.SlashCommandProperties.Name == _interaction.Data.Name);
-
-        protected override async Task PopulateParametersAsync(BotCommandAction action)
+        protected override IActionSlash GetAction()
         {
-            if (action.SlashCommandProperties.FillParametersAsync != null)
-                await action.SlashCommandProperties.FillParametersAsync(_interaction.Data.Options);
+            var (SubCommandName, SubOptions) = _interaction.Data.Options.GetSelectedSubOption();
+
+            if (SubCommandName != null)
+            {
+                _subOptions = SubOptions;
+                return _actionService.GetAll().OfType<IActionSlashChild>().Where(a => a.Parent.CommandName == _interaction.Data.Name).OfType<IActionSlash>().Where(a => a.CommandName == SubCommandName).FirstOrDefault();
+            }
+            else
+            {
+                return _actionService.GetAll().OfType<IActionSlash>().Where(a => a.CommandName == _interaction.Data.Name).FirstOrDefault();
+            }
         }
 
-        protected override async Task RunActionAsync(BotCommandAction action)
+        protected override async Task PopulateParametersAsync(IActionSlash action)
         {
-            await action.RunAsync();
+            await action.FillSlashParametersAsync(_subOptions ?? _interaction.Data.Options);
         }
     }
 
-    public class ActionMessageRunFactory : ActionRunFactory<SocketMessageCommand, BotCommandAction>
+    public class ActionMessageRunFactory : ActionRunFactory<SocketMessageCommand, IActionMessage>
     {
         protected override string InteractionNameForLog => _interaction.Data.Name;
+        protected override ActionRunContext RunContext => ActionRunContext.Message;
 
         public ActionMessageRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketMessageCommand interaction) : base(services, actionService, context, interaction) { }
 
-        protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.MessageCommandProperties != null && a.MessageCommandProperties.Name == _interaction.Data.Name);
+        protected override IActionMessage GetAction() => _actionService.GetAll().OfType<IActionMessage>().FirstOrDefault(a => a.CommandName == _interaction.Data.Name);
 
-        protected override async Task PopulateParametersAsync(BotCommandAction action)
+        protected override async Task PopulateParametersAsync(IActionMessage action)
         {
-            if (action.MessageCommandProperties.FillParametersAsync != null)
-                await action.MessageCommandProperties.FillParametersAsync(_interaction.Data.Message);
-        }
-
-        protected override async Task RunActionAsync(BotCommandAction action)
-        {
-            await action.RunAsync();
+            await action.FillMessageParametersAsync(_interaction.Data.Message);
         }
     }
 
-    public class ActionUserRunFactory : ActionRunFactory<SocketUserCommand, BotCommandAction>
+    public class ActionUserRunFactory : ActionRunFactory<SocketUserCommand, IActionUser>
     {
         protected override string InteractionNameForLog => _interaction.Data.Name;
+        protected override ActionRunContext RunContext => ActionRunContext.User;
 
         public ActionUserRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketUserCommand interaction) : base(services, actionService, context, interaction) { }
 
-        protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.UserCommandProperties != null && a.UserCommandProperties.Name == _interaction.Data.Name);
+        protected override IActionUser GetAction() => _actionService.GetAll().OfType<IActionUser>().FirstOrDefault(a => a.CommandName == _interaction.Data.Name);
 
-        protected override async Task PopulateParametersAsync(BotCommandAction action)
+        protected override async Task PopulateParametersAsync(IActionUser action)
         {
-            if (action.UserCommandProperties.FillParametersAsync != null)
-                await action.UserCommandProperties.FillParametersAsync(_interaction.Data.Member);
-        }
-
-        protected override async Task RunActionAsync(BotCommandAction action)
-        {
-            await action.RunAsync();
+            await action.FillUserParametersAsync(_interaction.Data.Member);
         }
     }
 
-    public enum ActionRefreshTargetMessage
-    {
-        Old,
-        New
-    }
-
-    public interface IActionRefreshMessageParts
-    {
-        ActionRefreshTargetMessage Target { get; set; }
-        public Task RefreshAsync(IServiceProvider services, RequestContext context, EphemeralRule ephemeralRule);
-    }
-
-
-    public class ActionRefreshMessagePartCollection : IActionRefreshMessageParts
-    {
-        public ActionRefreshTargetMessage Target { get; set; }
-        public Optional<string> Message { get; set; }
-        public Optional<Embed[]> Embeds { get; set; }
-        public Optional<MessageComponent> Components { get; set; }
-        public Optional<MessageResultCode> ResultCode { get; set; }
-
-        public async Task RefreshAsync(IServiceProvider services, RequestContext context, EphemeralRule ephemeralRule)
-        {
-            if (Target == ActionRefreshTargetMessage.Old) //must be first?
-            {
-                await context.UpdateReplyAsync(msgProps =>
-                {
-                    msgProps.Content = Message;
-                    msgProps.Embeds = Embeds;
-                    msgProps.Components = Components;
-                });
-            }
-            else if (Target == ActionRefreshTargetMessage.New)
-            {
-                var props = new MessageProperties() { Content = Message, Embeds = Embeds, Components = Components };
-                await context.ReplyAsync(ephemeralRule.ToEphemeral() ? EphemeralRule.EphemeralOrFail : EphemeralRule.Permanent, props.Content.GetValueOrDefault(), embed: props.Embed.GetValueOrDefault(), embeds: props.Embeds.GetValueOrDefault(),
-                    allowedMentions: props.AllowedMentions.GetValueOrDefault(), components: props.Components.GetValueOrDefault());
-            }
-        }
-    }
-
-    public class ActionRefreshMessagePartBuilder : IActionRefreshMessageParts
-    {
-        public ActionRefreshTargetMessage Target { get; set; } = ActionRefreshTargetMessage.New;
-        public Optional<string> UpdateMessage { get; set; }
-        public Optional<Embed[]> UpdateEmbeds { get; set; }
-        public Optional<MessageComponent> UpdateComponents { get; set; }
-        public IMessageBuilder MessageBuilder { get; set; }
-
-        public async Task RefreshAsync(IServiceProvider services, RequestContext context, EphemeralRule ephemeralRule)
-        {
-            if (Target == ActionRefreshTargetMessage.Old) //must be first?
-            {
-                await context.UpdateReplyAsync(msgProps =>
-                {
-                    msgProps.Content = UpdateMessage;
-                    msgProps.Embeds = UpdateEmbeds;
-                    msgProps.Components = UpdateComponents;
-                });
-            }
-            else if (Target == ActionRefreshTargetMessage.New)
-            {
-                await context.ReplyBuilderAsync(services, MessageBuilder, ephemeralRule.ToEphemeral());
-            }
-        }
-    }
-
-    public class ActionRefreshRunFactory : ActionRunFactory<SocketMessageComponent, BotCommandAction>
-    {
-
-        readonly string _commandTypeName;
-        readonly object[] _idOptions;
-        readonly ActionRefreshTargetMessage[] _targets;
-
-        protected override string InteractionNameForLog => _interaction.Data.CustomId;
-
-        public ActionRefreshRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketMessageComponent interaction) : base(services, actionService, context, interaction)
-        {
-            if (string.IsNullOrWhiteSpace(_interaction.Data.CustomId))
-                throw new CommandInvalidException();
-
-            //# = refresh component, ^ = refresh into new component, & = refresh both (separately)
-            //these chars can repeat to allow for unique custom IDs.
-            char matchChar = interaction.Data.CustomId.First();
-            _targets = matchChar switch
-            {
-                '^' => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.New },
-                '&' => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.Old, ActionRefreshTargetMessage.New },
-                '#' => new ActionRefreshTargetMessage[] { ActionRefreshTargetMessage.Old },
-                _ => throw new NotImplementedException()
-            };
-
-            var customId = interaction.Data.CustomId;
-            string[] splitId = Array.Empty<string>();
-            for (int i = 1; i < customId.Length; i++)
-            {
-                if (matchChar != customId[i])
-                {
-                    splitId = customId[i..].Split('.');
-                    break;
-                }
-            }
-
-            _commandTypeName = splitId[0];
-            _idOptions = splitId.Skip(1).Cast<object>().ToArray();
-        }
-
-        protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.CommandRefreshProperties != null && a.GetType().Name == _commandTypeName);
-
-        protected override async Task PopulateParametersAsync(BotCommandAction action)
-        {
-            if (action.CommandRefreshProperties.FillParametersAsync != null)
-            {
-                var selectOptions = _interaction.Data.Values?.ToArray();
-                await action.CommandRefreshProperties.FillParametersAsync(selectOptions, _idOptions);
-            }
-        }
-
-        protected override async Task RunActionAsync(BotCommandAction action)
-        {
-            var (Success, Message) = await action.CommandRefreshProperties.CanRefreshAsync(_targets);
-            if (!Success)
-            {
-                await _context.ReplyAsync(true, Message);
-                return;
-            }
-
-            var parts = await action.CommandRefreshProperties.RefreshAsync(_targets);
-            foreach (var part in parts)
-                await part.RefreshAsync(_services, _context, action.EphemeralRule);
-        }
-    }
-
-    public class ActionComponentRunFactory : ActionRunFactory<SocketMessageComponent, BotComponentAction>
+    public class ActionComponentRunFactory : ActionRunFactory<SocketMessageComponent, IActionComponent>
     {
         readonly string _commandTypeName;
         readonly object[] _idOptions;
 
         protected override string InteractionNameForLog => _interaction.Data.CustomId;
+        protected override ActionRunContext RunContext => ActionRunContext.Component;
 
         public ActionComponentRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketMessageComponent interaction) : base(services, actionService, context, interaction)
         {
             if (string.IsNullOrWhiteSpace(_interaction.Data.CustomId))
                 throw new CommandInvalidException();
 
-            var splitId = _interaction.Data.CustomId.Split('.');
+            var splitId = _interaction.Data.CustomId.Split('.').Where(x => !string.IsNullOrEmpty(x)).ToArray();
             _commandTypeName = splitId[0];
             _idOptions = splitId.Skip(1).Cast<object>().ToArray();
         }
 
-        protected override BotComponentAction GetAction() => _actionService.GetAll().OfType<BotComponentAction>().FirstOrDefault(a => a.GetType().Name == _commandTypeName);
+        protected override IActionComponent GetAction() => _actionService.GetAll().OfType<IActionComponent>().FirstOrDefault(a => a.GetType().Name == _commandTypeName);
 
-        protected override async Task PopulateParametersAsync(BotComponentAction action)
+        protected override async Task PopulateParametersAsync(IActionComponent action)
         {
             var selectOptions = _interaction.Data.Values?.ToArray();
-            await action.FillParametersAsync(selectOptions, _idOptions);
-        }
-
-        protected override async Task RunActionAsync(BotComponentAction action)
-        {
-            await action.RunAsync();
+            await action.FillComponentParametersAsync(selectOptions, _idOptions);
         }
     }
 
-    public class ActionAutocompleteResponseFactory : ActionRunFactory<SocketAutocompleteInteraction, BotCommandAction>
+    public class ActionAutocompleteResponseFactory : ActionRunFactory<SocketAutocompleteInteraction, IActionSlashAutocomplete>
     {
         protected override string InteractionNameForLog => _interaction.Data.CommandName;
 
         public ActionAutocompleteResponseFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketAutocompleteInteraction interaction) : base(services, actionService, context, interaction) { }
 
-        protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.SlashCommandProperties != null && a.SlashCommandProperties.AutocompleteAsync != null && a.SlashCommandProperties.Name == _interaction.Data.CommandName);
+        protected override IActionSlashAutocomplete GetAction() => _actionService.GetAll().OfType<IActionSlashAutocomplete>().FirstOrDefault(a => a.CommandName == _interaction.Data.CommandName);
 
-        protected override Task<bool> CheckPreconditionsAsync(BotCommandAction action) => Task.FromResult(true);
+        protected override Task<bool> CheckPreconditionsAsync(IActionSlashAutocomplete action) => Task.FromResult(true);
 
         protected override bool ValidateParameters => false;
-        protected override Task PopulateParametersAsync(BotCommandAction action) => Task.CompletedTask;
+        protected override Task PopulateParametersAsync(IActionSlashAutocomplete action) => Task.CompletedTask;
 
-        protected override async Task RunActionAsync(BotCommandAction action)
+        protected override async Task RunActionAsync(IActionSlashAutocomplete action)
         {
             try
             {
-                if (action.SlashCommandProperties.AutocompleteAsync.ContainsKey(_interaction.Data.Current.Name))
-                    await action.SlashCommandProperties.AutocompleteAsync[_interaction.Data.Current.Name](_interaction);
+                var autocompleteOptions = action.GenerateSlashAutocompleteOptions();
+                if (autocompleteOptions.ContainsKey(_interaction.Data.Current.Name))
+                    await autocompleteOptions[_interaction.Data.Current.Name](_interaction);
             }
             catch (TimeoutException) {  }
         }
     }
 
-    public class ActionModalResponseFactory : ActionRunFactory<SocketModal, BotCommandAction>
+    public class ActionModalResponseFactory : ActionRunFactory<SocketModal, IActionSlashModal>
     {
         readonly string _modalCustomId;
         readonly object[] _idOptions;
+
+        private Dictionary<string, (Func<object[], Task> FillParametersAsync, Func<SocketModal, Task> ModalCompleteAsync)> _modalOptions;
 
         protected override string InteractionNameForLog => _interaction.Data.CustomId;
 
@@ -445,57 +306,59 @@ namespace CAVX.Bots.Framework.Processing
             _idOptions = splitId.Skip(1).Cast<object>().ToArray();
         }
 
-        protected override BotCommandAction GetAction() => _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(a => a.SlashCommandProperties != null && a.SlashCommandProperties.ModalOptions != null && a.SlashCommandProperties.ModalOptions.ContainsKey(_modalCustomId));
-
-        protected override Task<bool> CheckPreconditionsAsync(BotCommandAction action) => Task.FromResult(true);
-
-        protected override async Task PopulateParametersAsync(BotCommandAction action)
+        protected override IActionSlashModal GetAction()
         {
-            //await action.FillParametersAsync(selectOptions, _idOptions);
-            if (action.SlashCommandProperties.ModalOptions.ContainsKey(_modalCustomId))
-                await action.SlashCommandProperties.ModalOptions[_modalCustomId].FillParametersAsync(_idOptions);
+            var selectedModal = _actionService.GetAll().OfType<IActionSlashModal>().Select(a =>
+            {
+                var modalOptions = a.GenerateSlashModalOptions();
+                return new { Action = a, ModalOptions = modalOptions };
+            })
+            .Where(a => a.ModalOptions != null && a.ModalOptions.ContainsKey(_modalCustomId)).FirstOrDefault();
+
+            if (selectedModal != null)
+            {
+                _modalOptions = selectedModal.ModalOptions;
+                return selectedModal.Action;
+            }
+
+            return null;
         }
 
+        protected override Task<bool> CheckPreconditionsAsync(IActionSlashModal action) => Task.FromResult(true);
 
-        protected override async Task RunActionAsync(BotCommandAction action)
+        protected override async Task PopulateParametersAsync(IActionSlashModal action)
+        {
+            if (_modalOptions.ContainsKey(_modalCustomId))
+                await _modalOptions[_modalCustomId].FillParametersAsync(_idOptions);
+        }
+
+        protected override async Task RunActionAsync(IActionSlashModal action)
         {
             try
             {
-                if (action.SlashCommandProperties.ModalOptions.ContainsKey(_modalCustomId))
-                    await action.SlashCommandProperties.ModalOptions[_modalCustomId].ModalCompleteAsync(_interaction);
+                if (_modalOptions.ContainsKey(_modalCustomId))
+                    await _modalOptions[_modalCustomId].ModalCompleteAsync(_interaction);
             }
             catch (TimeoutException) { }
         }
     }
 
-    public class ActionTextRunFactory : ActionRunFactory<CommandInfo, BotCommandAction>
+    public class ActionTextRunFactory : ActionRunFactory<CommandInfo, IActionText>
     {
         readonly object[] _parmValues;
-        ActionTextCommandProperties _textProperties;
         protected override string InteractionNameForLog => _interaction.Name;
+        protected override ActionRunContext RunContext => ActionRunContext.Text;
 
-        public ActionTextRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, CommandInfo commandInfo, object[] parmValues) : base(services, actionService, context, commandInfo) { _parmValues = parmValues; }
-
-        protected override BotCommandAction GetAction()
+        public ActionTextRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, CommandInfo commandInfo, object[] parmValues) : base(services, actionService, context, commandInfo)
         {
-            var action = _actionService.GetAll().OfType<BotCommandAction>().FirstOrDefault(s => s.TextCommandProperties != null && s.TextCommandProperties.Any(t => t.Name == _interaction.Name));
-
-            _textProperties = action.TextCommandProperties.FirstOrDefault(t => t.Name == _interaction.Name);
-            if (_textProperties == null)
-                throw new CommandInvalidException();
-
-            return action;
+            _parmValues = parmValues;
         }
 
-        protected override async Task PopulateParametersAsync(BotCommandAction action)
-        {
-            if (_textProperties.FillParametersAsync != null)
-                await _textProperties.FillParametersAsync(_parmValues);
-        }
+        protected override IActionText GetAction() => _actionService.GetAll().OfType<IActionText>().FirstOrDefault(a => a.CommandName == _interaction.Name);
 
-        protected override async Task RunActionAsync(BotCommandAction action)
+        protected override async Task PopulateParametersAsync(IActionText action)
         {
-            await action.RunAsync();
+            await action.FillTextParametersAsync(_parmValues);
         }
     }
 }

@@ -18,6 +18,9 @@ using CAVX.Bots.Framework.Processing;
 using CAVX.Bots.Framework.Models;
 using System.Collections.Concurrent;
 using CAVX.Bots.Framework.Modules;
+using static System.Collections.Specialized.BitVector32;
+using CAVX.Bots.Framework.Extensions;
+using ScottPlot.Styles;
 
 namespace CAVX.Bots.Framework.Services
 {
@@ -41,19 +44,19 @@ namespace CAVX.Bots.Framework.Services
             return Task.CompletedTask;
         }
 
-        public List<BotAction> GetAll()
+        public List<IBotAction> GetAll()
         {
             var scope = _services.CreateScope();
 
-            var allActions = new List<BotAction>();
+            var allActions = new List<IBotAction>();
 
             var types = AppDomain.CurrentDomain.GetAssemblies()
                 .Where(a => !a.IsDynamic)
                 .SelectMany(a => a.GetTypes())
-                .Where(myType => myType.IsClass && !myType.IsAbstract && myType.IsSubclassOf(typeof(BotAction)));
+                .Where(myType => myType.IsClass && !myType.IsAbstract && myType.IsAssignableTo(typeof(IBotAction)));
 
             foreach (Type type in types)
-                allActions.Add((BotAction)ActivatorUtilities.CreateInstance(scope.ServiceProvider, type));
+                allActions.Add((IBotAction)ActivatorUtilities.CreateInstance(scope.ServiceProvider, type));
 
             return allActions;
         }
@@ -75,140 +78,157 @@ namespace CAVX.Bots.Framework.Services
             }
         }
 
-        public async Task<int> PopulateGlobalCommandsAsync(bool refresh = false, string filterName = null)
+        public async Task<(int PopulatedCount, int DeletedCount)> PopulateGlobalCommandsAsync(bool refresh = false, string filterName = null) => await PopulateCommandsAsync(refresh, false, filterName, _discord.Rest.CreateGlobalCommand);
+
+        public async Task<(int PopulatedCount, int DeletedCount)> AddGuildCommandAsync(ulong guildId, string name) => await PopulateCommandsAsync(true, true, name, (props, options) => _discord.Rest.CreateGuildCommand(props, guildId, options));
+
+        public async Task<(int PopulatedCount, int DeletedCount)> PopulateCommandsAsync(bool refresh, bool conditionalGuildsOnly, string filterName, Func<ApplicationCommandProperties, RequestOptions, Task> CommandCreateAsync)
         {
             int populatedCount = 0;
+            int deletedCount = 0;
 
-            var allActions = GetAll().OfType<BotCommandAction>();
+            var allActions = GetAll().OfType<IBotAction>().Where(a => a.ConditionalGuildsOnly == conditionalGuildsOnly);
 
-            var globalCommands = await _discord.Rest.GetGlobalApplicationCommands().ConfigureAwait(false);
-            var slashActions = allActions
-                .Where(a => a.SlashCommandProperties != null && a.SlashCommandProperties is ActionGlobalSlashCommandProperties && (filterName is null || filterName == a.SlashCommandProperties.Name));
+            var serverCommands = await _discord.Rest.GetGlobalApplicationCommands().ConfigureAwait(false);
+            List<string> commandNames = new();
+            
+            var slashChildActionGroups = allActions.OfType<IActionSlash>().OfType<IActionSlashChild>()
+                .Where(a => filterName is null || filterName == a.Parent.CommandName).GroupBy(a => a.Parent.CommandName);
 
-            foreach (var slashAction in slashActions)
+            var slashActionsStandalone = allActions.OfType<IActionSlash>()
+                .Where(a => a is not IActionSlashChild && (filterName is null || filterName == a.CommandName));
+
+            foreach (var slashActionGroup in slashChildActionGroups)
             {
-                if (refresh || !globalCommands.Any(c => c.Name == slashAction.SlashCommandProperties.Name)) // and [c.Type == ApplicationCommandType.Slash] when the bug is fixed, so names can overlap
+                var parent = slashActionGroup.Key == null ? null : slashActionGroup.First().Parent;
+                if (refresh || !serverCommands.Any(c => c.Name == parent.CommandName)) // and [c.Type == ApplicationCommandType.Slash] when the bug is fixed, so names can overlap
                 {
-                    var commandProperties = await BuildSlashCommandPropertiesAsync(slashAction);
-                    await _discord.Rest.CreateGlobalCommand(commandProperties);
+                    var commandBuilder = GenerateCommand(parent);
+
+                    foreach (var slashActionChild in slashActionGroup)
+                    {
+                        var slashAction = slashActionChild as IActionSlash;
+                        var subOptionBuilder = new SlashCommandOptionBuilder()
+                        {
+                            Name = slashAction.CommandName,
+                            Description = slashAction.CommandDescription,
+                            IsRequired = false,
+                            Type = ApplicationCommandOptionType.SubCommand
+                        };
+
+                        foreach(var parameterOption in await GenerateParametersForActionAsync(slashAction))
+                            subOptionBuilder.AddOption(parameterOption);
+
+                        commandBuilder.AddOption(subOptionBuilder);
+                    }
+
+                    commandNames.Add(parent.CommandName); //and factor in command type later too
+                    await CommandCreateAsync(commandBuilder.Build(), null);
                     populatedCount++;
                 }
             }
 
-            var messageActions = allActions
-                .Where(a => a.MessageCommandProperties != null && a.MessageCommandProperties is ActionGlobalMessageCommandProperties && (filterName is null || filterName == a.MessageCommandProperties.Name));
+            foreach (var slashAction in slashActionsStandalone)
+            {
+                if (refresh || !serverCommands.Any(c => c.Name == slashAction.CommandName)) // and [c.Type == ApplicationCommandType.Slash] when the bug is fixed, so names can overlap
+                {
+                    var commandBuilder = GenerateCommand(slashAction);
+                    foreach (var parameterOption in await GenerateParametersForActionAsync(slashAction))
+                        commandBuilder.AddOption(parameterOption);
+
+                    commandNames.Add(slashAction.CommandName); //and factor in command type later too
+                    await CommandCreateAsync(commandBuilder.Build(), null);
+                    populatedCount++;
+                }
+            }
+
+            var messageActions = allActions.OfType<IActionMessage>()
+                .Where(a => filterName is null || filterName == a.CommandName);
 
             foreach (var messageAction in messageActions)
             {
-                if (refresh || !globalCommands.Any(c => c.Name == messageAction.MessageCommandProperties.Name)) // and [c.Type == ApplicationCommandType.Message] when the bug is fixed, so names can overlap
+                if (refresh || !serverCommands.Any(c => c.Name == messageAction.CommandName)) // and [c.Type == ApplicationCommandType.Message] when the bug is fixed, so names can overlap
                 {
                     var commandProperties = BuildMessageCommandProperties(messageAction);
-                    await _discord.Rest.CreateGlobalCommand(commandProperties);
+
+                    commandNames.Add(messageAction.CommandName); //and factor in command type later too
+                    await CommandCreateAsync(commandProperties, null);
                     populatedCount++;
                 }
             }
 
-            var userActions = allActions
-                .Where(a => a.UserCommandProperties != null && a.UserCommandProperties is ActionGlobalUserCommandProperties && (filterName is null || filterName == a.UserCommandProperties.Name));
+            var userActions = allActions.OfType<IActionUser>()
+                .Where(a => filterName is null || filterName == a.CommandName);
 
             foreach (var userAction in userActions)
             {
-                if (refresh || !globalCommands.Any(c => c.Name == userAction.UserCommandProperties.Name)) // and [c.Type == ApplicationCommandType.User] when the bug is fixed, so names can overlap
+                if (refresh || !serverCommands.Any(c => c.Name == userAction.CommandName)) // and [c.Type == ApplicationCommandType.User] when the bug is fixed, so names can overlap
                 {
                     var commandProperties = BuildUserCommandProperties(userAction);
-                    await _discord.Rest.CreateGlobalCommand(commandProperties);
+
+                    commandNames.Add(userAction.CommandName); //and factor in command type later too
+                    await CommandCreateAsync(commandProperties, null);
                     populatedCount++;
                 }
             }
 
-            /* See below
-            var guildIds = (await _discord.Rest.GetGuildsAsync()).Select(g => g.Id);
-            foreach (var guildId in guildIds)
+            if (refresh && filterName is null && populatedCount > 0 && serverCommands.ExistsWithItems())
             {
-                var guild = _discord.GetGuild(guildId);
-                if (guild != null)
-                    await SetOwnerPermissionsAsync(guild);
-            }
-            */
-
-            return populatedCount;
-        }
-
-        public async Task AddGuildCommandAsync(ulong guildId, string name)
-        {
-            var allActions = GetAll().OfType<BotCommandAction>();
-
-            var slashActions = allActions.Where(a => a.SlashCommandProperties != null && a.SlashCommandProperties is ActionGuildSlashCommandProperties && a.SlashCommandProperties.Name == name);
-
-            foreach (var slashAction in slashActions)
-            {
-                var commandProperties = await BuildSlashCommandPropertiesAsync(slashAction);
-                await _discord.Rest.CreateGuildCommand(commandProperties, guildId);
-            }
-
-            var messageActions = allActions.Where(a => a.MessageCommandProperties != null && a.MessageCommandProperties is ActionGuildMessageCommandProperties && a.MessageCommandProperties.Name == name);
-
-            foreach (var messageAction in messageActions)
-            {
-                var commandProperties = BuildMessageCommandProperties(messageAction);
-                await _discord.Rest.CreateGuildCommand(commandProperties, guildId);
-            }
-
-            var userActions = allActions.Where(a => a.UserCommandProperties != null && a.UserCommandProperties is ActionGuildUserCommandProperties && a.UserCommandProperties.Name == name);
-
-            foreach (var userAction in userActions)
-            {
-                var commandProperties = BuildUserCommandProperties(userAction);
-                await _discord.Rest.CreateGuildCommand(commandProperties, guildId);
-            }
-        }
-
-        private async Task<SlashCommandProperties> BuildSlashCommandPropertiesAsync(BotCommandAction action)
-        {
-            var newCommand = new SlashCommandBuilder();
-            newCommand.WithName(action.SlashCommandProperties.Name);
-            newCommand.WithDescription(action.SlashCommandProperties.Description);
-            if (action.RequiredAccessRule != null && action.RequiredAccessRule.PermissionType == ActionPermissionType.RequirePermission)
-                newCommand.WithDefaultMemberPermissions(action.RequiredAccessRule.RequiredPermission);
-
-            var parameters = action.GetParameters<ActionParameterSlashAttribute>()?.OrderBy(p => p.Attribute.Order);
-            if (parameters != null)
-            {
-                var filteredParameters = parameters.Where(p => p.Attribute.ParentNames == null || !p.Attribute.ParentNames.Any()).ToList();
-                if (filteredParameters != null && filteredParameters.Any())
+                foreach (var command in serverCommands.Where(c => !commandNames.Contains(c.Name)))
                 {
-                    Dictionary<string, List<(string Name, string Value)>> generatedOptions = null;
-                    if (action.SlashCommandProperties.GenerateParameterOptionsAsync != null)
-                    {
-                        using var scope = _services.CreateScope();
-                        generatedOptions = await action.SlashCommandProperties.GenerateParameterOptionsAsync(scope.ServiceProvider);
-                    }
-
-                    foreach (var p in filteredParameters)
-                    {
-                        var option = BuildOptionFromParameter(p.Property, p.Attribute, parameters.ToList(), generatedOptions, action.SlashCommandProperties.AutocompleteAsync?.Keys.ToList());
-
-                        newCommand.AddOption(option);
-                    }
+                    await command.DeleteAsync();
+                    deletedCount++;
                 }
             }
-            //newCommand.WithDefaultPermission(action.RequiredPermissions == null);
 
-            return newCommand.Build();
+            return (populatedCount, deletedCount);
         }
 
-        private MessageCommandProperties BuildMessageCommandProperties(BotCommandAction action)
+        private SlashCommandBuilder GenerateCommand(IActionSlashRoot commandInfo)
+        {
+            var newCommand = new SlashCommandBuilder();
+            newCommand.WithName(commandInfo.CommandName);
+            newCommand.WithDescription(commandInfo.CommandDescription);
+            if (commandInfo.RequiredAccessRule != null && commandInfo.RequiredAccessRule.PermissionType == ActionPermissionType.RequirePermission)
+                newCommand.WithDefaultMemberPermissions(commandInfo.RequiredAccessRule.RequiredPermission);
+
+            return newCommand;
+        }
+
+        private async Task<List<SlashCommandOptionBuilder>> GenerateParametersForActionAsync(IActionSlash action)
+        {
+            List<SlashCommandOptionBuilder> values = new();
+            var parameters = action.GetParameters<ActionParameterSlashAttribute>()?.OrderBy(p => p.Attribute.Order);
+            if (parameters.ExistsWithItems())
+            {
+                Dictionary<string, List<(string Name, string Value)>> generatedOptions = null;
+                if (action is IActionSlashParameterOptions paramOptions)
+                {
+                    using var scope = _services.CreateScope();
+                    generatedOptions = await paramOptions.GenerateSlashParameterOptionsAsync(scope.ServiceProvider);
+                }
+
+                foreach (var p in parameters)
+                {
+                    var autocompleteKeys = (action as IActionSlashAutocomplete)?.GenerateSlashAutocompleteOptions()?.Keys.ToList();
+                    values.Add(BuildOptionFromParameter(p.Property, p.Attribute, parameters.ToList(), generatedOptions, autocompleteKeys));
+                }
+            }
+            return values;
+        }
+
+        private MessageCommandProperties BuildMessageCommandProperties(IActionMessage action)
         {
             var newCommand = new MessageCommandBuilder();
-            newCommand.WithName(action.MessageCommandProperties.Name);
+            newCommand.WithName(action.CommandName);
 
             return newCommand.Build();
         }
 
-        private UserCommandProperties BuildUserCommandProperties(BotCommandAction action)
+        private UserCommandProperties BuildUserCommandProperties(IActionUser action)
         {
             var newCommand = new UserCommandBuilder();
-            newCommand.WithName(action.UserCommandProperties.Name);
+            newCommand.WithName(action.CommandName);
 
             return newCommand.Build();
         }
@@ -241,13 +261,13 @@ namespace CAVX.Bots.Framework.Services
 
         private SlashCommandOptionBuilder BuildOptionFromParameter(PropertyInfo property, ActionParameterSlashAttribute attribute, List<(PropertyInfo Property, ActionParameterSlashAttribute Attribute)> parameters, Dictionary<string, List<(string Name, string Value)>> generatedOptions, List<string> autocompleteParameters)
         {
-            var option = new SlashCommandOptionBuilder()
+            var optionBuilder = new SlashCommandOptionBuilder()
             {
                 Name = attribute.Name,
                 Description = attribute.Description,
                 IsRequired = attribute.Required,
-                Type = attribute.Type,
-                IsDefault = attribute.DefaultSubCommand ? true : null,
+                Type = attribute.Type.ToApplicationCommandOptionType(),
+                IsDefault = null,
                 IsAutocomplete = autocompleteParameters?.Contains(attribute.Name) ?? false,
             };
 
@@ -255,14 +275,14 @@ namespace CAVX.Bots.Framework.Services
             if (stringChoices != null && stringChoices.Any())
             {
                 foreach (var c in stringChoices)
-                    option.AddChoice(c.Name, c.Value);
+                    optionBuilder.AddChoice(c.Name, c.Value);
             }
 
             var intChoices = property.GetCustomAttributes(false).OfType<ActionParameterOptionIntAttribute>()?.OrderBy(c => c.Order);
             if (intChoices != null && intChoices.Any())
             {
                 foreach (var c in intChoices)
-                    option.AddChoice(c.Name, c.Value);
+                    optionBuilder.AddChoice(c.Name, c.Value);
             }
 
             if (generatedOptions != null && generatedOptions.Any())
@@ -271,22 +291,11 @@ namespace CAVX.Bots.Framework.Services
                 if (generatedChoices != null && generatedChoices.Any())
                 {
                     foreach (var c in generatedChoices)
-                        option.AddChoice(c.Name, c.Value);
+                        optionBuilder.AddChoice(c.Name, c.Value);
                 }
             }
 
-            var filteredParameters = parameters.Where(p => p.Attribute.ParentNames != null && p.Attribute.ParentNames.Contains(attribute.Name)).ToList();
-            if (filteredParameters != null && filteredParameters.Any())
-            {
-                foreach (var p in filteredParameters)
-                {
-                    var subOption = BuildOptionFromParameter(p.Property, p.Attribute, filteredParameters, null, autocompleteParameters);
-
-                    option.AddOption(subOption);
-                }
-            }
-
-            return option;
+            return optionBuilder;
         }
 
         private readonly ConcurrentDictionary<ulong, ICollectorLogic> _inProgressCollectors = new();
