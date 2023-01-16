@@ -18,6 +18,7 @@ using Discord.Commands.Builders;
 using CAVX.Bots.Framework.Modules.Actions;
 using CAVX.Bots.Framework.Modules.Contexts;
 using CAVX.Bots.Framework.Modules.Actions.Attributes;
+using AsyncKeyedLock;
 
 namespace CAVX.Bots.Framework.Modules
 {
@@ -78,14 +79,17 @@ namespace CAVX.Bots.Framework.Modules
             }
         }
 
-        public async Task RunActionFromTextCommand(ICommandContext commandContext, object[] parmValues, IServiceProvider services, CommandInfo commandInfo)
+        public Task RunActionFromTextCommand(ICommandContext commandContext, object[] parmValues, IServiceProvider services, CommandInfo commandInfo)
         {
             var actionService = services.GetRequiredService<ActionService>();
+            var asyncKeyedLocker = services.GetRequiredService<AsyncKeyedLocker<ulong>>();
 
             var context = new RequestCommandContext(commandContext as SocketCommandContext);
-            var actionRunFactory = ActionRunFactory.Find(services, actionService, context, commandInfo, parmValues);
+            var actionRunFactory = ActionRunFactory.Find(services, actionService, asyncKeyedLocker, context, commandInfo, parmValues);
             if (actionRunFactory != null)
-                await actionRunFactory.RunActionAsync();
+                _ = actionRunFactory.RunActionAsync();
+
+            return Task.CompletedTask;
         }
     }
 }

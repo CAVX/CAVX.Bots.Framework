@@ -21,17 +21,20 @@ using CAVX.Bots.Framework.Modules;
 using static System.Collections.Specialized.BitVector32;
 using CAVX.Bots.Framework.Extensions;
 using ScottPlot.Styles;
+using AsyncKeyedLock;
 
 namespace CAVX.Bots.Framework.Services
 {
     public class ActionService
     {
         private readonly DiscordSocketClient _discord;
+        private readonly AsyncKeyedLocker<ulong> _asyncKeyedLocker;
         private readonly IServiceProvider _services;
 
         public ActionService(IServiceProvider services)
         {
             _discord = services.GetRequiredService<DiscordSocketClient>();
+            _asyncKeyedLocker = services.GetRequiredService<AsyncKeyedLocker<ulong>>();
             _services = services;
         }
 
@@ -319,12 +322,14 @@ namespace CAVX.Bots.Framework.Services
             return await collector.Execute(user, messageId, idParams, selectParams);
         }
 
-        private async Task Client_InteractionCreated(SocketInteraction arg)
+        private Task Client_InteractionCreated(SocketInteraction arg)
         {
             var context = new RequestInteractionContext(arg, _discord);
-            var actionRunFactory = ActionRunFactory.Find(_services, this, context, arg);
+            var actionRunFactory = ActionRunFactory.Find(_services, this, _asyncKeyedLocker, context, arg);
             if (actionRunFactory != null)
-                await actionRunFactory.RunActionAsync();
+                _ = actionRunFactory.RunActionAsync();
+
+            return Task.CompletedTask;
         }
     }
 }

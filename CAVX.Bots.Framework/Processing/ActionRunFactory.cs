@@ -13,6 +13,8 @@ using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Extensions;
 using System.Threading;
 using Discord;
+using AsyncKeyedLock;
+using static System.Collections.Specialized.BitVector32;
 
 namespace CAVX.Bots.Framework.Processing
 {
@@ -20,25 +22,25 @@ namespace CAVX.Bots.Framework.Processing
     {
         public abstract Task RunActionAsync();
 
-        public static ActionRunFactory Find(IServiceProvider services, ActionService actionService, RequestContext context, SocketInteraction interaction)
+        public static ActionRunFactory Find(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, SocketInteraction interaction)
         {
             if (interaction is SocketSlashCommand slashCommand)
-                return new ActionSlashRunFactory(services, actionService, context, slashCommand);
+                return new ActionSlashRunFactory(services, actionService, asyncKeyedLocker, context, slashCommand);
             else if (interaction is SocketMessageCommand msgCommand)
-                return new ActionMessageRunFactory(services, actionService, context, msgCommand);
+                return new ActionMessageRunFactory(services, actionService, asyncKeyedLocker, context, msgCommand);
             else if (interaction is SocketUserCommand userCommand)
-                return new ActionUserRunFactory(services, actionService, context, userCommand);
+                return new ActionUserRunFactory(services, actionService, asyncKeyedLocker, context, userCommand);
             else if (interaction is SocketAutocompleteInteraction autocompleteInteraction)
-                return new ActionAutocompleteResponseFactory(services, actionService, context, autocompleteInteraction);
+                return new ActionAutocompleteResponseFactory(services, actionService, asyncKeyedLocker, context, autocompleteInteraction);
             else if (interaction is SocketModal modalInteraction)
-                return new ActionModalResponseFactory(services, actionService, context, modalInteraction);
+                return new ActionModalResponseFactory(services, actionService, asyncKeyedLocker, context, modalInteraction);
             else if (interaction is SocketMessageComponent component)
-                    return new ActionComponentRunFactory(services, actionService, context, component);
+                    return new ActionComponentRunFactory(services, actionService, asyncKeyedLocker, context, component);
 
             return null;
         }
 
-        public static ActionRunFactory Find(IServiceProvider services, ActionService actionService, RequestContext context, CommandInfo commandInfo, object[] parmValues) => new ActionTextRunFactory(services, actionService, context, commandInfo, parmValues);
+        public static ActionRunFactory Find(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, CommandInfo commandInfo, object[] parmValues) => new ActionTextRunFactory(services, actionService, asyncKeyedLocker, context, commandInfo, parmValues);
     }
 
 
@@ -48,14 +50,16 @@ namespace CAVX.Bots.Framework.Processing
         protected TInteraction _interaction;
         protected RequestContext _context;
         protected ActionService _actionService;
+        protected AsyncKeyedLocker<ulong> _asyncKeyedLocker;
 
-        public ActionRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, TInteraction interaction)
+        public ActionRunFactory(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, TInteraction interaction)
         {
             _services = services;
             _context = context;
             _interaction = interaction;
 
             _actionService = actionService;
+            _asyncKeyedLocker = asyncKeyedLocker;
         }
 
         protected abstract string InteractionNameForLog { get; }
@@ -72,6 +76,9 @@ namespace CAVX.Bots.Framework.Processing
 
         public override async Task RunActionAsync()
         {
+            var guid = Guid.NewGuid();
+            Console.WriteLine($"[{guid}] starting");
+
             CancellationTokenSource ts = null;
             if (_context is RequestCommandContext)
             {
@@ -90,16 +97,50 @@ namespace CAVX.Bots.Framework.Processing
 
             action.Initialize(_context);
 
+            Console.WriteLine($"[{guid}] action initialized");
+
             bool skipDefer = action.GetType().GetCustomAttributes(false).OfType<ActionNoDeferAttribute>().ExistsWithItems();
+            bool useQueue = action.GetType().GetCustomAttributes(false).OfType<ActionUseQueueAttribute>().ExistsWithItems();
 
             if (_interaction is SocketInteraction si && _context is RequestInteractionContext ic && !skipDefer)
+            {
                 QueueDefer(action, si, ic);
+                Console.WriteLine($"[{guid}] defer queued");
+            }
+
+            if (useQueue && _context.Guild != null)
+            {
+
+                Console.WriteLine($"[{guid}] waiting for lock");
+                using (await _asyncKeyedLocker.LockAsync(_context.Guild.Id))
+                {
+
+                    Console.WriteLine($"[{guid}] locked");
+                    if (!Utilities.TempDebug.False)
+                        await Task.Delay(6000);
+                    action = GetAction(); //refresh scope
+                    Console.WriteLine($"[{guid}] scope refreshed");
+                    action.Initialize(_context);
+                    Console.WriteLine($"[{guid}] executing action");
+                    await ExecuteActionAsync(action, ts);
+                    Console.WriteLine($"[{guid}] done");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[{guid}] no lock needed, executing");
+                _ = ExecuteActionAsync(action, ts);
+            }
+        }
+
+        private async Task ExecuteActionAsync(TAction action, CancellationTokenSource ts)
+        {
             if (!await PopulateAndValidateParametersAsync(action))
                 return;
             if (!await CheckPreconditionsAsync(action))
                 return;
 
-            RunAndHandleAction(action);
+            await RunAndHandleActionAsync(action);
             ts?.Cancel();
         }
 
@@ -159,22 +200,19 @@ namespace CAVX.Bots.Framework.Processing
             return true;
         }
 
-        private void RunAndHandleAction(TAction action)
+        private async Task RunAndHandleActionAsync(TAction action)
         {
-            _ = Task.Run(async () =>
+            try
             {
-                try
-                {
-                    await RunActionAsync(action);
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e);
-                    await _context.ReplyAsync(action.EphemeralRule, "Something went wrong!").ConfigureAwait(false);
-                    await Logger.Instance.LogErrorAsync(_context, InteractionNameForLog, e);
-                    return;
-                }
-            });
+                await RunActionAsync(action);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                await _context.ReplyAsync(action.EphemeralRule, "Something went wrong!").ConfigureAwait(false);
+                await Logger.Instance.LogErrorAsync(_context, InteractionNameForLog, e);
+                return;
+            }
         }
     }
 
@@ -185,7 +223,7 @@ namespace CAVX.Bots.Framework.Processing
         protected override string InteractionNameForLog => _interaction.Data.Name;
         protected override ActionRunContext RunContext => ActionRunContext.Slash;
 
-        public ActionSlashRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketSlashCommand interaction) : base(services, actionService, context, interaction) { }
+        public ActionSlashRunFactory(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, SocketSlashCommand interaction) : base(services, actionService, asyncKeyedLocker, context, interaction) { }
 
         protected override IActionSlash GetAction()
         {
@@ -213,7 +251,7 @@ namespace CAVX.Bots.Framework.Processing
         protected override string InteractionNameForLog => _interaction.Data.Name;
         protected override ActionRunContext RunContext => ActionRunContext.Message;
 
-        public ActionMessageRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketMessageCommand interaction) : base(services, actionService, context, interaction) { }
+        public ActionMessageRunFactory(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, SocketMessageCommand interaction) : base(services, actionService, asyncKeyedLocker, context, interaction) { }
 
         protected override IActionMessage GetAction() => _actionService.GetAll().OfType<IActionMessage>().FirstOrDefault(a => a.CommandName == _interaction.Data.Name);
 
@@ -228,7 +266,7 @@ namespace CAVX.Bots.Framework.Processing
         protected override string InteractionNameForLog => _interaction.Data.Name;
         protected override ActionRunContext RunContext => ActionRunContext.User;
 
-        public ActionUserRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketUserCommand interaction) : base(services, actionService, context, interaction) { }
+        public ActionUserRunFactory(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, SocketUserCommand interaction) : base(services, actionService, asyncKeyedLocker, context, interaction) { }
 
         protected override IActionUser GetAction() => _actionService.GetAll().OfType<IActionUser>().FirstOrDefault(a => a.CommandName == _interaction.Data.Name);
 
@@ -246,7 +284,7 @@ namespace CAVX.Bots.Framework.Processing
         protected override string InteractionNameForLog => _interaction.Data.CustomId;
         protected override ActionRunContext RunContext => ActionRunContext.Component;
 
-        public ActionComponentRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketMessageComponent interaction) : base(services, actionService, context, interaction)
+        public ActionComponentRunFactory(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, SocketMessageComponent interaction) : base(services, actionService, asyncKeyedLocker, context, interaction)
         {
             if (string.IsNullOrWhiteSpace(_interaction.Data.CustomId))
                 throw new CommandInvalidException();
@@ -269,7 +307,7 @@ namespace CAVX.Bots.Framework.Processing
     {
         protected override string InteractionNameForLog => _interaction.Data.CommandName;
 
-        public ActionAutocompleteResponseFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketAutocompleteInteraction interaction) : base(services, actionService, context, interaction) { }
+        public ActionAutocompleteResponseFactory(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, SocketAutocompleteInteraction interaction) : base(services, actionService, asyncKeyedLocker, context, interaction) { }
 
         protected override IActionSlashAutocomplete GetAction() => _actionService.GetAll().OfType<IActionSlashAutocomplete>().FirstOrDefault(a => a.CommandName == _interaction.Data.CommandName);
 
@@ -299,7 +337,7 @@ namespace CAVX.Bots.Framework.Processing
 
         protected override string InteractionNameForLog => _interaction.Data.CustomId;
 
-        public ActionModalResponseFactory(IServiceProvider services, ActionService actionService, RequestContext context, SocketModal interaction) : base(services, actionService, context, interaction)
+        public ActionModalResponseFactory(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, SocketModal interaction) : base(services, actionService, asyncKeyedLocker, context, interaction)
         {
             var splitId = _interaction.Data.CustomId.Split('.');
             _modalCustomId = splitId[0];
@@ -349,7 +387,7 @@ namespace CAVX.Bots.Framework.Processing
         protected override string InteractionNameForLog => _interaction.Name;
         protected override ActionRunContext RunContext => ActionRunContext.Text;
 
-        public ActionTextRunFactory(IServiceProvider services, ActionService actionService, RequestContext context, CommandInfo commandInfo, object[] parmValues) : base(services, actionService, context, commandInfo)
+        public ActionTextRunFactory(IServiceProvider services, ActionService actionService, AsyncKeyedLocker<ulong> asyncKeyedLocker, RequestContext context, CommandInfo commandInfo, object[] parmValues) : base(services, actionService, asyncKeyedLocker, context, commandInfo)
         {
             _parmValues = parmValues;
         }
