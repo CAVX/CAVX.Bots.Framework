@@ -100,8 +100,6 @@ namespace CAVX.Bots.Framework.Processing
             {
                 using (await _asyncKeyedLocker.LockAsync(_context.Guild.Id))
                 {
-                    if (!Utilities.TempDebug.False)
-                        await Task.Delay(6000);
                     action = GetAction(); //refresh scope
                     action.Initialize(_context);
                     await ExecuteActionAsync(action, ts);
