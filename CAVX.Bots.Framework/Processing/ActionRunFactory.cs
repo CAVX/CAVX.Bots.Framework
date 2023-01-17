@@ -73,12 +73,8 @@ namespace CAVX.Bots.Framework.Processing
             await action.RunAsync(RunContext);
         }
 
-
         public override async Task RunActionAsync()
         {
-            var guid = Guid.NewGuid();
-            Console.WriteLine($"[{guid}] starting");
-
             CancellationTokenSource ts = null;
             if (_context is RequestCommandContext)
             {
@@ -97,35 +93,22 @@ namespace CAVX.Bots.Framework.Processing
 
             action.Initialize(_context);
 
-            Console.WriteLine($"[{guid}] action initialized");
-
             if (_interaction is SocketInteraction si && _context is RequestInteractionContext ic && !action.SkipDefer)
-            {
                 QueueDefer(action, si, ic);
-                Console.WriteLine($"[{guid}] defer queued");
-            }
 
             if (action.UseQueue && _context.Guild != null)
             {
-
-                Console.WriteLine($"[{guid}] waiting for lock");
                 using (await _asyncKeyedLocker.LockAsync(_context.Guild.Id))
                 {
-
-                    Console.WriteLine($"[{guid}] locked");
                     if (!Utilities.TempDebug.False)
                         await Task.Delay(6000);
                     action = GetAction(); //refresh scope
-                    Console.WriteLine($"[{guid}] scope refreshed");
                     action.Initialize(_context);
-                    Console.WriteLine($"[{guid}] executing action");
                     await ExecuteActionAsync(action, ts);
-                    Console.WriteLine($"[{guid}] done");
                 }
             }
             else
             {
-                Console.WriteLine($"[{guid}] no lock needed, executing");
                 _ = ExecuteActionAsync(action, ts);
             }
         }

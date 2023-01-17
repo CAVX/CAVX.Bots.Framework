@@ -117,16 +117,22 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                     {
                         try
                         {
-                            await messageBuilder.DeferredBuilder.PreprocessAsync();
-                            if (contextMetadata != null && contextMetadata.UseQueue)
+                            var scope = baseServices.CreateScope();
+                            var builderInstance = ActivatorUtilities.CreateInstance(scope.ServiceProvider, messageBuilder.DeferredBuilder.InstanceType);
+                            if (builderInstance != null)
                             {
-                                var asyncKeyedLocker = baseServices.GetRequiredService<AsyncKeyedLocker<ulong>>();
-                                using (await asyncKeyedLocker.LockAsync(Guild.Id))
+                                messageBuilder.DeferredBuilder.SetInstanceAndProperties(builderInstance, contextMetadata, message);
+                                await messageBuilder.DeferredBuilder.PreprocessAsync();
+                                if (contextMetadata != null && contextMetadata.UseQueue)
+                                {
+                                    var asyncKeyedLocker = baseServices.GetRequiredService<AsyncKeyedLocker<ulong>>();
+                                    using (await asyncKeyedLocker.LockAsync(Guild.Id))
+                                        await SendDeferredMessage(baseServices, messageBuilder, ephemeralRule, contextMetadata, message);
+                                }
+                                else
+                                {
                                     await SendDeferredMessage(baseServices, messageBuilder, ephemeralRule, contextMetadata, message);
-                            }
-                            else
-                            {
-                                await SendDeferredMessage(baseServices, messageBuilder, ephemeralRule, contextMetadata, message);
+                                }
                             }
                         }
                         catch (Exception e)
@@ -142,16 +148,10 @@ namespace CAVX.Bots.Framework.Modules.Contexts
 
             async Task SendDeferredMessage(IServiceProvider baseServices, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, IContextMetadata contextMetadata, RestUserMessage message)
             {
-                var scope = baseServices.CreateScope();
-                var builderInstance = ActivatorUtilities.CreateInstance(scope.ServiceProvider, messageBuilder.DeferredBuilder.InstanceType);
-                if (builderInstance != null)
+                var innerBuilder = await messageBuilder.DeferredBuilder.GetDeferredMessageAsync();
+                if (innerBuilder != null)
                 {
-                    messageBuilder.DeferredBuilder.SetInstanceAndProperties(builderInstance, contextMetadata, message);
-                    var innerBuilder = await messageBuilder.DeferredBuilder.GetDeferredMessageAsync();
-                    if (innerBuilder != null)
-                    {
-                        await ReplyBuilderAsync(baseServices, innerBuilder, ephemeralRule, contextMetadata, message.Id);
-                    }
+                    await ReplyBuilderAsync(baseServices, innerBuilder, ephemeralRule, contextMetadata, message.Id);
                 }
             }
         }
