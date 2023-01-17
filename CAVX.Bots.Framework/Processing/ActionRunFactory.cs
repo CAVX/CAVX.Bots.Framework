@@ -99,16 +99,13 @@ namespace CAVX.Bots.Framework.Processing
 
             Console.WriteLine($"[{guid}] action initialized");
 
-            bool skipDefer = action.GetType().GetCustomAttributes(false).OfType<ActionNoDeferAttribute>().ExistsWithItems();
-            bool useQueue = action.GetType().GetCustomAttributes(false).OfType<ActionUseQueueAttribute>().ExistsWithItems();
-
-            if (_interaction is SocketInteraction si && _context is RequestInteractionContext ic && !skipDefer)
+            if (_interaction is SocketInteraction si && _context is RequestInteractionContext ic && !action.SkipDefer)
             {
                 QueueDefer(action, si, ic);
                 Console.WriteLine($"[{guid}] defer queued");
             }
 
-            if (useQueue && _context.Guild != null)
+            if (action.UseQueue && _context.Guild != null)
             {
 
                 Console.WriteLine($"[{guid}] waiting for lock");

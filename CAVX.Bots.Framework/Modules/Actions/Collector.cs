@@ -44,7 +44,7 @@ namespace CAVX.Bots.Framework.Modules.Actions
 
         protected override Task<(bool Success, string Message)> CheckCustomPreconditionsAsync(ActionRunContext runContext)
         {
-            _contextService.AddContext(Context);
+            _contextService.AddContext(this);
 
             return Task.FromResult((true, (string)null));
         }
@@ -78,13 +78,13 @@ namespace CAVX.Bots.Framework.Modules.Actions
                 if (Builder == null)
                     await Context.ReplyAsync(true, FailureMessage ?? "Something went wrong!");
                 else
-                    await Context.ReplyBuilderAsync(_services, Builder, true, messageId);
+                    await Context.ReplyBuilderAsync(_services, Builder, true, this, messageId);
 
                 return;
             }
 
             if (Builder != null)
-                await Context.ReplyBuilderAsync(_services, Builder, true, messageId);
+                await Context.ReplyBuilderAsync(_services, Builder, true, this, messageId);
             else
                 await Context.ReplyAsync(true, "Got it. Thanks!");
         }

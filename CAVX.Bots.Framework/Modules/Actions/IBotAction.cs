@@ -8,9 +8,8 @@ using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Modules.Actions
 {
-    public interface IBotAction
+    public interface IBotAction : IContextMetadata
     {
-        RequestContext Context { get; set; }
         EphemeralRule EphemeralRule { get; }
         bool RestrictAccessToGuilds { get; }
         bool ConditionalGuildsOnly { get; }

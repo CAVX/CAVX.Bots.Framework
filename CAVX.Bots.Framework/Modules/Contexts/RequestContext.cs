@@ -62,9 +62,9 @@ namespace CAVX.Bots.Framework.Modules.Contexts
 
         public abstract Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null);
 
-        public Task ReplyBuilderAsync(IServiceProvider baseServices, IMessageBuilder messageBuilder, bool ephemeral, bool useQueue, ulong? referenceMessageId = null)
-            => ReplyBuilderAsync(baseServices, messageBuilder, ephemeral ? EphemeralRule.EphemeralOrFallback : EphemeralRule.Permanent, useQueue, referenceMessageId);
-        public async Task ReplyBuilderAsync(IServiceProvider baseServices, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, bool useQueue, ulong? referenceMessageId = null)
+        public Task ReplyBuilderAsync(IServiceProvider baseServices, IMessageBuilder messageBuilder, bool ephemeral, IContextMetadata contextMetadata, ulong? referenceMessageId = null)
+            => ReplyBuilderAsync(baseServices, messageBuilder, ephemeral ? EphemeralRule.EphemeralOrFallback : EphemeralRule.Permanent, contextMetadata, referenceMessageId);
+        public async Task ReplyBuilderAsync(IServiceProvider baseServices, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, IContextMetadata contextMetadata, ulong? referenceMessageId = null)
         {
             var messageData = messageBuilder.BuildOutput();
 
@@ -117,10 +117,16 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                     {
                         try
                         {
-                            var asyncKeyedLocker = baseServices.GetRequiredService<AsyncKeyedLocker<ulong>>();
-                            using (await asyncKeyedLocker.LockAsync(Guild.Id))
+                            await messageBuilder.DeferredBuilder.PreprocessAsync();
+                            if (contextMetadata != null && contextMetadata.UseQueue)
                             {
-                                await SendDeferredMessage(baseServices, messageBuilder, ephemeralRule, useQueue, message);
+                                var asyncKeyedLocker = baseServices.GetRequiredService<AsyncKeyedLocker<ulong>>();
+                                using (await asyncKeyedLocker.LockAsync(Guild.Id))
+                                    await SendDeferredMessage(baseServices, messageBuilder, ephemeralRule, contextMetadata, message);
+                            }
+                            else
+                            {
+                                await SendDeferredMessage(baseServices, messageBuilder, ephemeralRule, contextMetadata, message);
                             }
                         }
                         catch (Exception e)
@@ -134,17 +140,17 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                 }
             }
 
-            async Task SendDeferredMessage(IServiceProvider baseServices, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, bool useQueue, RestUserMessage message)
+            async Task SendDeferredMessage(IServiceProvider baseServices, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, IContextMetadata contextMetadata, RestUserMessage message)
             {
                 var scope = baseServices.CreateScope();
                 var builderInstance = ActivatorUtilities.CreateInstance(scope.ServiceProvider, messageBuilder.DeferredBuilder.InstanceType);
                 if (builderInstance != null)
                 {
-                    messageBuilder.DeferredBuilder.SetInstanceAndProperties(builderInstance, this, message);
-                    var innerBuilder = await messageBuilder.DeferredBuilder.GetDeferredMessage();
+                    messageBuilder.DeferredBuilder.SetInstanceAndProperties(builderInstance, contextMetadata, message);
+                    var innerBuilder = await messageBuilder.DeferredBuilder.GetDeferredMessageAsync();
                     if (innerBuilder != null)
                     {
-                        await ReplyBuilderAsync(baseServices, innerBuilder, ephemeralRule, useQueue, message.Id);
+                        await ReplyBuilderAsync(baseServices, innerBuilder, ephemeralRule, contextMetadata, message.Id);
                     }
                 }
             }

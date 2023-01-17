@@ -17,12 +17,12 @@ namespace CAVX.Bots.Framework.Models
 
     public abstract class DeferredBuilder
     {
-        protected RequestContext _context;
+        protected IContextMetadata _contextMetadata;
         protected RestUserMessage _message;
 
-        public void Initialize(RequestContext context, RestUserMessage message)
+        public void Initialize(IContextMetadata contextMetadata, RestUserMessage message)
         {
-            _context = context;
+            _contextMetadata = contextMetadata;
             _message = message;
         }
     }
@@ -30,30 +30,38 @@ namespace CAVX.Bots.Framework.Models
     public interface IDeferredInvoke
     {
         Type InstanceType { get; }
-        void SetInstanceAndProperties(object instance, RequestContext context, RestUserMessage message);
-        Task<IMessageBuilder> GetDeferredMessage();
+        void SetInstanceAndProperties(object instance, IContextMetadata contextMetadata, RestUserMessage message);
+        Task PreprocessAsync();
+        Task<IMessageBuilder> GetDeferredMessageAsync();
     }
 
     public class DeferredInvoke<T> : IDeferredInvoke where T : DeferredBuilder
     {
-        public Func<T, Task<IMessageBuilder>> GetDeferredInvoke { get; set; }
+        public Func<T, Task> GetDeferredPreprocessInvoke { get; set; }
+        public Func<T, Task<IMessageBuilder>> GetDeferredMessageInvoke { get; set; }
         public T Instance { get; set; }
         public Type InstanceType => typeof(T);
 
-        public DeferredInvoke(Func<T, Task<IMessageBuilder>> getDeferredInvoke)
+        public DeferredInvoke(Func<T, Task> getDeferredPreprocessInvoke, Func<T, Task<IMessageBuilder>> getDeferredMessageInvoke)
         {
-            GetDeferredInvoke = getDeferredInvoke;
+            GetDeferredPreprocessInvoke = getDeferredPreprocessInvoke;
+            GetDeferredMessageInvoke = getDeferredMessageInvoke;
         }
 
-        public void SetInstanceAndProperties(object instance, RequestContext context, RestUserMessage message)
+        public void SetInstanceAndProperties(object instance, IContextMetadata contextMetadata, RestUserMessage message)
         {
             Instance = instance as T;
-            Instance.Initialize(context, message);
+            Instance.Initialize(contextMetadata, message);
         }
 
-        public Task<IMessageBuilder> GetDeferredMessage()
+        public Task PreprocessAsync()
         {
-            return GetDeferredInvoke?.Invoke(Instance);
+            return GetDeferredPreprocessInvoke?.Invoke(Instance);
+        }
+
+        public Task<IMessageBuilder> GetDeferredMessageAsync()
+        {
+            return GetDeferredMessageInvoke?.Invoke(Instance);
         }
     }
 

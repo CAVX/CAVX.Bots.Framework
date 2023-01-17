@@ -9,11 +9,15 @@ using CAVX.Bots.Framework.Modules.Actions.Attributes;
 using CAVX.Bots.Framework.Modules.Contexts;
 using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Processing;
+using CAVX.Bots.Framework.Extensions;
 
 namespace CAVX.Bots.Framework.Modules.Actions
 {
     public abstract class BotAction : IBotAction
     {
+        public bool UseQueue => GetType().GetCustomAttributes(false).OfType<ActionUseQueueAttribute>().ExistsWithItems();
+        public bool SkipDefer => GetType().GetCustomAttributes(false).OfType<ActionNoDeferAttribute>().ExistsWithItems();
+
         public RequestContext Context { get; set; }
         public void Initialize(RequestContext context)
         {
