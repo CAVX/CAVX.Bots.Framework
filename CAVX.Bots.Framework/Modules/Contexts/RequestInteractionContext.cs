@@ -159,7 +159,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                                     mp.Embeds = embeds;
                                     mp.AllowedMentions = allowedMentions;
                                     mp.Components = components;
-                                    mp.Attachments = attachments ?? new FileAttachment[] { };
+                                    mp.Attachments = attachments ?? Array.Empty<FileAttachment>();
                                 }, options);
                             }
                             catch (HttpException)
@@ -174,7 +174,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                                     mp.Embeds = embeds;
                                     mp.AllowedMentions = allowedMentions;
                                     mp.Components = components;
-                                    mp.Attachments = attachments ?? new FileAttachment[] { };
+                                    mp.Attachments = attachments ?? Array.Empty<FileAttachment>();
                                 }, options);
                             }
                         }
@@ -193,17 +193,17 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                 }
                 catch (TimeoutException te)
                 {
-                    return await RetryReplyAsync(te, ephemeralRule, message, isTTS, attachments, embeds, null, options, allowedMentions, messageReference, components, initial, hasAttachments);
+                    return await RetryReplyAsync(te, ephemeralRule, message, isTTS, attachments, embeds, options, allowedMentions, messageReference, components, initial, hasAttachments);
                 }
                 catch (HttpException e)
                 {
-                    return await RetryReplyAsync(e, ephemeralRule, message, isTTS, attachments, embeds, null, options, allowedMentions, messageReference, components, initial, hasAttachments);
+                    return await RetryReplyAsync(e, ephemeralRule, message, isTTS, attachments, embeds, options, allowedMentions, messageReference, components, initial, hasAttachments);
                 }
             });
         }
 
         private async Task<RestUserMessage> RetryReplyAsync(Exception ex, EphemeralRule ephemeralRule, string message, bool isTTS, FileAttachment[] attachments,
-            Embed[] embeds, Embed embed, RequestOptions options, AllowedMentions allowedMentions, MessageReference messageReference, MessageComponent components,
+            Embed[] embeds, RequestOptions options, AllowedMentions allowedMentions, MessageReference messageReference, MessageComponent components,
             bool initial, bool hasAttachments)
         {
             _acknowledgeStatus = RequestAcknowledgeStatus.AcknowledgeFailed;
@@ -219,7 +219,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
             else
                 return await _sendMessageQueueLock.LockAsync(async () =>
                     hasAttachments
-                        ? await Channel.SendFilesAsync(attachments, message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds) as RestUserMessage
+                        ? await Channel.SendFilesAsync(attachments, message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds)
                         : await Channel.SendMessageAsync(message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds));
         }
 
