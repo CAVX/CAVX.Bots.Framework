@@ -50,7 +50,6 @@ namespace CAVX.Bots.Framework.Modules.Actions.Attributes
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
     public class ActionParameterSlashAttribute : Attribute, IActionParameterAttribute
     {
-        public string[] FilterCommandNames { get; set; }
         public int Order { get; set; }
 
         public string Name { get; set; }
