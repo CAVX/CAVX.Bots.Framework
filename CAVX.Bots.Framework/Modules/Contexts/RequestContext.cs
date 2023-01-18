@@ -10,6 +10,7 @@ using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Utilities;
 using CAVX.Bots.Framework.Extensions;
 using System.Linq;
+using AsyncKeyedLock;
 
 namespace CAVX.Bots.Framework.Modules.Contexts
 {
@@ -61,9 +62,9 @@ namespace CAVX.Bots.Framework.Modules.Contexts
 
         public abstract Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null);
 
-        public Task ReplyBuilderAsync(IServiceProvider baseServices, IMessageBuilder messageBuilder, bool ephemeral, ulong? referenceMessageId = null)
-            => ReplyBuilderAsync(baseServices, messageBuilder, ephemeral ? EphemeralRule.EphemeralOrFallback : EphemeralRule.Permanent, referenceMessageId);
-        public async Task ReplyBuilderAsync(IServiceProvider baseServices, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, ulong? referenceMessageId = null)
+        public Task ReplyBuilderAsync(IServiceProvider baseServices, IMessageBuilder messageBuilder, bool ephemeral, IContextMetadata contextMetadata, ulong? referenceMessageId = null)
+            => ReplyBuilderAsync(baseServices, messageBuilder, ephemeral ? EphemeralRule.EphemeralOrFallback : EphemeralRule.Permanent, contextMetadata, referenceMessageId);
+        public async Task ReplyBuilderAsync(IServiceProvider baseServices, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, IContextMetadata contextMetadata, ulong? referenceMessageId = null)
         {
             var messageData = messageBuilder.BuildOutput();
 
@@ -112,27 +113,45 @@ namespace CAVX.Bots.Framework.Modules.Contexts
 
                 if (messageBuilder.DeferredBuilder != null)
                 {
-                    try
+                    _ = Task.Run(async () =>
                     {
-                        var scope = baseServices.CreateScope();
-                        var builderInstance = ActivatorUtilities.CreateInstance(scope.ServiceProvider, messageBuilder.DeferredBuilder.InstanceType);
-                        if (builderInstance != null)
+                        try
                         {
-                            messageBuilder.DeferredBuilder.SetInstanceAndProperties(builderInstance, this, message);
-                            var innerBuilder = await messageBuilder.DeferredBuilder.GetDeferredMessage();
-                            if (innerBuilder != null)
+                            var scope = baseServices.CreateScope();
+                            var builderInstance = ActivatorUtilities.CreateInstance(scope.ServiceProvider, messageBuilder.DeferredBuilder.InstanceType);
+                            if (builderInstance != null)
                             {
-                                await ReplyBuilderAsync(baseServices, innerBuilder, ephemeralRule, message.Id);
+                                messageBuilder.DeferredBuilder.SetInstanceAndProperties(builderInstance, contextMetadata, message);
+                                await messageBuilder.DeferredBuilder.PreprocessAsync();
+                                if (contextMetadata != null && contextMetadata.UseQueue)
+                                {
+                                    var asyncKeyedLocker = baseServices.GetRequiredService<AsyncKeyedLocker<ulong>>();
+                                    using (await asyncKeyedLocker.LockAsync(Guild.Id))
+                                        await SendDeferredMessage(baseServices, messageBuilder, ephemeralRule, contextMetadata, message);
+                                }
+                                else
+                                {
+                                    await SendDeferredMessage(baseServices, messageBuilder, ephemeralRule, contextMetadata, message);
+                                }
                             }
                         }
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e);
-                        await ReplyAsync(ephemeralRule, "Something went wrong!").ConfigureAwait(false);
-                        await Logger.Instance.LogErrorAsync(this, "Inner execution exception", e);
-                        return;
-                    }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine(e);
+                            await ReplyAsync(ephemeralRule, "Something went wrong!").ConfigureAwait(false);
+                            await Logger.Instance.LogErrorAsync(this, "Inner execution exception", e);
+                            return;
+                        }
+                    });
+                }
+            }
+
+            async Task SendDeferredMessage(IServiceProvider baseServices, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, IContextMetadata contextMetadata, RestUserMessage message)
+            {
+                var innerBuilder = await messageBuilder.DeferredBuilder.GetDeferredMessageAsync();
+                if (innerBuilder != null)
+                {
+                    await ReplyBuilderAsync(baseServices, innerBuilder, ephemeralRule, contextMetadata, message.Id);
                 }
             }
         }
