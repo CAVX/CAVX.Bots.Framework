@@ -151,7 +151,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                 var innerBuilder = await messageBuilder.DeferredBuilder.GetDeferredMessageAsync();
                 if (innerBuilder != null)
                 {
-                    await ReplyBuilderAsync(baseServices, innerBuilder, ephemeralRule, contextMetadata, message.Id);
+                    await ReplyBuilderAsync(baseServices, innerBuilder, ephemeralRule, contextMetadata, message?.Id);
                 }
             }
         }
