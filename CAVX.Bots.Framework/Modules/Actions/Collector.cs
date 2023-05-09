@@ -7,6 +7,7 @@ using CAVX.Bots.Framework.Modules.Actions.Attributes;
 using CAVX.Bots.Framework.Services;
 using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Processing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CAVX.Bots.Framework.Modules.Actions
 {
@@ -31,13 +32,13 @@ namespace CAVX.Bots.Framework.Modules.Actions
         public override bool ConditionalGuildsOnly => false;
         public override ActionAccessRule RequiredAccessRule => null;
 
-        readonly IServiceProvider _services;
+        readonly IServiceScopeFactory _scopeFactory;
         readonly IContextService _contextService;
         readonly ActionService _actionService;
 
-        public Collector(IServiceProvider services, IContextService contextService, ActionService actionService)
+        public Collector(IServiceScopeFactory scopeFactory, IContextService contextService, ActionService actionService)
         {
-            _services = services;
+            _scopeFactory = scopeFactory;
             _contextService = contextService;
             _actionService = actionService;
         }
@@ -78,13 +79,13 @@ namespace CAVX.Bots.Framework.Modules.Actions
                 if (Builder == null)
                     await Context.ReplyAsync(true, FailureMessage ?? "Something went wrong!");
                 else
-                    await Context.ReplyBuilderAsync(_services, Builder, true, this, messageId);
+                    await Context.ReplyBuilderAsync(_scopeFactory, Builder, true, this, messageId);
 
                 return;
             }
 
             if (Builder != null)
-                await Context.ReplyBuilderAsync(_services, Builder, true, this, messageId);
+                await Context.ReplyBuilderAsync(_scopeFactory, Builder, true, this, messageId);
             else
                 await Context.ReplyAsync(true, "Got it. Thanks!");
         }
