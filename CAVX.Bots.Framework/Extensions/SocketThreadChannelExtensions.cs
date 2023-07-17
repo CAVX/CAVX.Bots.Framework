@@ -32,17 +32,12 @@ namespace CAVX.Bots.Framework.Extensions
                 var everyoneRole = role.Guild.EveryoneRole;
                 if (everyoneRole.Id != role.Id)
                 {
-                    isPrivate = !(threadChannel.GetPermissionOverwrite(everyoneRole).ViewChannelPermissionDefined()
-                        ?? threadChannel.ParentChannel.GetPermissionOverwrite(everyoneRole).ViewChannelPermissionDefined()
-                        ?? (threadChannel.ParentChannel as SocketTextChannel)?.Category?.GetPermissionOverwrite(everyoneRole).ViewChannelPermissionDefined()
-                        ?? true);
+                    isPrivate = !(threadChannel.ParentChannel.GetPermissionOverwrite(everyoneRole).ViewChannelPermissionDefined() ?? true); //only explicitly blocking the channel to @everyone makes it private. Inherit does not.
                 }
 
                 //See if users with the current role can view the threads without the right role access.
-                var noAccess = !(threadChannel.GetPermissionOverwrite(role).ViewChannelPermissionDefined()
-                    ?? threadChannel.ParentChannel.GetPermissionOverwrite(role).ViewChannelPermissionDefined()
-                    ?? (threadChannel.ParentChannel as SocketTextChannel)?.Category?.GetPermissionOverwrite(role).ViewChannelPermissionDefined()
-                    ?? (!isPrivate && role.Permissions.ViewChannel)); //if it's private, you need to explicitly have a channel setting defined.
+                var noAccess = !(threadChannel.ParentChannel.GetPermissionOverwrite(role).ViewChannelPermissionDefined()
+                    ?? (!isPrivate && (role.Permissions.ViewChannel || everyoneRole.Permissions.ViewChannel))); //if it's private, you need to explicitly have a channel-based permission defined.
 
                 return noAccess ? ThreadChannelRoleAccess.Forbidden : ThreadChannelRoleAccess.Accessible;
             }
