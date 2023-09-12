@@ -4,36 +4,38 @@ using System;
 
 namespace CAVX.Bots.Framework.Modules.Actions.Attributes
 {
-
-    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
-    public class SlashOptionMapAttribute : Attribute
+    [AttributeUsage(AttributeTargets.Field)]
+    public class SlashOptionMapAttribute(ApplicationCommandOptionType mapping) : Attribute
     {
-        public ApplicationCommandOptionType Mapping { get; set; }
-
-        public SlashOptionMapAttribute(ApplicationCommandOptionType mapping)
-        {
-            Mapping = mapping;
-        }
+        public ApplicationCommandOptionType Mapping { get; set; } = mapping;
     }
 
     public enum SlashOptionType : byte
     {
         [SlashOptionMap(ApplicationCommandOptionType.String)]
         String,
+
         [SlashOptionMap(ApplicationCommandOptionType.Integer)]
         Integer,
+
         [SlashOptionMap(ApplicationCommandOptionType.Boolean)]
         Boolean,
+
         [SlashOptionMap(ApplicationCommandOptionType.User)]
         User,
+
         [SlashOptionMap(ApplicationCommandOptionType.Channel)]
         Channel,
+
         [SlashOptionMap(ApplicationCommandOptionType.Role)]
         Role,
+
         [SlashOptionMap(ApplicationCommandOptionType.Mentionable)]
         Mentionable,
+
         [SlashOptionMap(ApplicationCommandOptionType.Number)]
         Number,
+
         [SlashOptionMap(ApplicationCommandOptionType.Attachment)]
         Attachment
     }
@@ -46,8 +48,7 @@ namespace CAVX.Bots.Framework.Modules.Actions.Attributes
         }
     }
 
-
-    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
+    [AttributeUsage(AttributeTargets.Property)]
     public class ActionParameterSlashAttribute : Attribute, IActionParameterAttribute
     {
         public int Order { get; set; }
@@ -55,6 +56,6 @@ namespace CAVX.Bots.Framework.Modules.Actions.Attributes
         public string Name { get; set; }
         public SlashOptionType Type { get; set; }
         public string Description { get; set; }
-        public bool Required { get; set; } = false;
+        public bool Required { get; set; }
     }
 }

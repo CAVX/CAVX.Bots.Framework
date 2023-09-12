@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace CAVX.Bots.Framework.Utilities
+﻿namespace CAVX.Bots.Framework.Utilities
 {
     public static class TempDebug
     {

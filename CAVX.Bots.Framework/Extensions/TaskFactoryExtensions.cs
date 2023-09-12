@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -19,8 +16,9 @@ namespace CAVX.Bots.Framework.Extensions
         /// <returns>The started task.</returns>
         public static Task Run<T>(this TaskFactory taskFactory, Action<T> action, T state)
         {
-            Action<object> boxedAction = o => action((T)o);
-            return taskFactory.StartNew(boxedAction, state);
+            return taskFactory.StartNew(BoxedAction, state);
+
+            void BoxedAction(object o) => action((T)o);
         }
 
         /// <summary>
@@ -34,8 +32,9 @@ namespace CAVX.Bots.Framework.Extensions
         /// <returns>The started task.</returns>
         public static Task Run<T>(this TaskFactory taskFactory, Action<T> action, T state, CancellationToken cancellationToken)
         {
-            Action<object> boxedAction = o => action((T)o);
-            return taskFactory.StartNew(boxedAction, state, cancellationToken);
+            return taskFactory.StartNew(BoxedAction, state, cancellationToken);
+
+            void BoxedAction(object o) => action((T)o);
         }
 
         /// <summary>
@@ -45,14 +44,15 @@ namespace CAVX.Bots.Framework.Extensions
         /// <param name="taskFactory">The current task factory.</param>
         /// <param name="action">The action delegate to execute asynchronously.</param>
         /// <param name="state">An object containing data to be used by the action delegate.</param>
-        /// <param name="cancellationToken">The cancellation token that will be assigned to the new task.</param>
         /// <param name="creationOptions">One of the enumeration values that controls the behavior of the created task.</param>
         /// <param name="scheduler">The task scheduler that is used to schedule the created task.</param>
+        /// <param name="cancellationToken">The cancellation token that will be assigned to the new task.</param>
         /// <returns>The started task.</returns>
-        public static Task Run<T>(this TaskFactory taskFactory, Action<T> action, T state, CancellationToken cancellationToken, TaskCreationOptions creationOptions, TaskScheduler scheduler)
+        public static Task Run<T>(this TaskFactory taskFactory, Action<T> action, T state, TaskCreationOptions creationOptions, TaskScheduler scheduler, CancellationToken cancellationToken)
         {
-            Action<object> boxedAction = o => action((T)o);
-            return taskFactory.StartNew(boxedAction, state, cancellationToken, creationOptions, scheduler);
+            return taskFactory.StartNew(BoxedAction, state, cancellationToken, creationOptions, scheduler);
+
+            void BoxedAction(object o) => action((T)o);
         }
     }
 }

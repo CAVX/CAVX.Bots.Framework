@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Utilities
@@ -14,7 +12,6 @@ namespace CAVX.Bots.Framework.Utilities
         /// <param name="frequency">The frequency at which the condition will be check, in milliseconds.</param>
         /// <param name="timeout">Timeout in milliseconds.</param>
         /// <exception cref="TimeoutException"></exception>
-        /// <returns></returns>
         public static async Task WaitWhile(Func<bool> condition, int frequency = 25, int timeout = -1)
         {
             var waitTask = Task.Run(async () =>
@@ -32,7 +29,6 @@ namespace CAVX.Bots.Framework.Utilities
         /// <param name="condition">The break condition.</param>
         /// <param name="frequency">The frequency at which the condition will be checked.</param>
         /// <param name="timeout">The timeout in milliseconds.</param>
-        /// <returns></returns>
         public static async Task WaitUntil(Func<bool> condition, int frequency = 25, int timeout = -1)
         {
             var waitTask = Task.Run(async () =>
@@ -47,7 +43,9 @@ namespace CAVX.Bots.Framework.Utilities
 
             if (waitTask != await Task.WhenAny(waitTask,
                     Task.Delay(timeout)))
+            {
                 throw new TimeoutException();
+            }
         }
     }
 }

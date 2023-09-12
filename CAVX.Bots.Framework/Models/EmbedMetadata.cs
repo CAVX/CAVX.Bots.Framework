@@ -1,9 +1,4 @@
 ﻿using Discord;
-using Discord.Commands;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Models
 {
@@ -14,17 +9,10 @@ namespace CAVX.Bots.Framework.Models
         string EmbedThumbnailUrl { get; }
     }
 
-    public class EmbedMetadata : IEmbedMetadata
+    public class EmbedMetadata(string title, Color color, string thumbnailUrl) : IEmbedMetadata
     {
-        public string EmbedTitle { get; }
-        public Color EmbedColor { get; }
-        public string EmbedThumbnailUrl { get; }
-
-        public EmbedMetadata(string title, Color color, string thumbnailUrl)
-        {
-            EmbedTitle = title;
-            EmbedColor = color;
-            EmbedThumbnailUrl = thumbnailUrl;
-        }
+        public string EmbedTitle { get; } = title;
+        public Color EmbedColor { get; } = color;
+        public string EmbedThumbnailUrl { get; } = thumbnailUrl;
     }
 }

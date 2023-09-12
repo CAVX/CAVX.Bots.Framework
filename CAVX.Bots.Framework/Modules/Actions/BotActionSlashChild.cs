@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using CAVX.Bots.Framework.Models;
-using Discord.WebSocket;
+﻿using CAVX.Bots.Framework.Models;
+using System;
 
 namespace CAVX.Bots.Framework.Modules.Actions
 {
@@ -11,20 +8,13 @@ namespace CAVX.Bots.Framework.Modules.Actions
         IActionSlashParent Parent { get; }
     }
 
-
     public abstract class BotActionSlashChild<TParent> : BotAction, IActionSlashChild where TParent : class, IActionSlashParent
     {
-        public TParent Parent { get; set; }
+        public TParent Parent { get; set; } = Activator.CreateInstance<TParent>();
         IActionSlashParent IActionSlashChild.Parent => Parent;
 
-        public BotActionSlashChild() : base()
-        {
-            Parent = Activator.CreateInstance<TParent>();
-        }
-
-        public override sealed bool RestrictAccessToGuilds => Parent.RestrictAccessToGuilds;
-        public override sealed bool ConditionalGuildsOnly => Parent.ConditionalGuildsOnly;
-        public override sealed ActionAccessRule RequiredAccessRule => Parent.RequiredAccessRule;
-
+        public sealed override bool RestrictAccessToGuilds => Parent.RestrictAccessToGuilds;
+        public sealed override bool ConditionalGuildsOnly => Parent.ConditionalGuildsOnly;
+        public sealed override ActionAccessRule RequiredAccessRule => Parent.RequiredAccessRule;
     }
 }

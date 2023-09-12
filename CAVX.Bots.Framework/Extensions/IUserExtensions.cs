@@ -1,9 +1,6 @@
 ﻿using Discord;
-using Discord.Commands;
 using Discord.WebSocket;
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace CAVX.Bots.Framework.Extensions
 {
@@ -14,9 +11,16 @@ namespace CAVX.Bots.Framework.Extensions
             var nickname = guild?.GetUser(user.Id)?.Nickname;
             return string.IsNullOrWhiteSpace(nickname) ? user.Username : nickname;
         }
+
         public static async System.Threading.Tasks.Task<string> DisplayNameAsync(this IUser user, IGuild guild)
         {
-            var nickname = (await guild?.GetUserAsync(user.Id))?.Nickname;
+            if (user is null)
+                throw new ArgumentNullException(nameof(user));
+
+            if (guild is null)
+                throw new ArgumentNullException(nameof(guild));
+
+            var nickname = (await guild.GetUserAsync(user.Id))?.Nickname;
             return string.IsNullOrWhiteSpace(nickname) ? user.Username : nickname;
         }
     }

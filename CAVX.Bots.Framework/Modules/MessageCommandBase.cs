@@ -1,10 +1,5 @@
-﻿using Discord;
+﻿using CAVX.Bots.Framework.Modules.Contexts;
 using Discord.Commands;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
-using CAVX.Bots.Framework.Modules.Contexts;
 
 namespace CAVX.Bots.Framework.Modules
 {

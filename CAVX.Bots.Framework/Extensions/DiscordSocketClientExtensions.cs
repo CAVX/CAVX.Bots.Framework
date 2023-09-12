@@ -1,18 +1,12 @@
 ﻿using Discord;
-using Discord.Rest;
 using Discord.WebSocket;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Extensions
 {
     public static class DiscordSocketClientExtensions
     {
-        private static ulong? _ownerId = null;
+        private static ulong? _ownerId;
 
         public static async Task SendDirectMessageToOwner(this DiscordSocketClient client, string message)
         {

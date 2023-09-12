@@ -1,12 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using CAVX.Bots.Framework.Utilities;
 
 namespace CAVX.Bots.Framework.Extensions
 {
@@ -20,7 +16,7 @@ namespace CAVX.Bots.Framework.Extensions
         public static List<T> Shuffle<T>(this List<T> list)
         {
             var count = list.Count;
-            if (count == 0 || count == 1)
+            if (count is 0 or 1)
                 return list;
 
             while (count > 1)
@@ -39,17 +35,17 @@ namespace CAVX.Bots.Framework.Extensions
 
             IQueryable<T> query = items.AsQueryable();
             if (whereFunc != null)
-                query = query.Where(whereFunc).AsQueryable();
+                query = query.AsEnumerable().Where(whereFunc).AsQueryable();
 
             return query;
         }
 
         public static IQueryable<TRet> Query<T, TRet>(this IQueryable<T> items, Expression<Func<T, TRet>> select, Expression<Func<T, bool>> where = null) where T : class
         {
-            Func<T, TRet> selectFunc = select?.Compile();
+            Func<T, TRet> selectFunc = select.Compile();
             IQueryable<T> query = Query(items, where);
 
-            return query.Select(selectFunc).AsQueryable();
+            return query.AsEnumerable().Select(selectFunc).AsQueryable();
         }
 
         public static async Task<IEnumerable<T>> WhereAsync<T>(this IEnumerable<T> items, Func<T, Task<bool>> predicate)
@@ -61,7 +57,7 @@ namespace CAVX.Bots.Framework.Extensions
 
         public static IEnumerable<IEnumerable<T>> GetAllPossibleCombos<T>(this IEnumerable<IEnumerable<T>> objects)
         {
-            IEnumerable<List<T>> combos = new List<List<T>>() { new List<T>() };
+            IEnumerable<List<T>> combos = new List<List<T>> { new() };
 
             foreach (var innerList in objects)
             {
@@ -80,11 +76,11 @@ namespace CAVX.Bots.Framework.Extensions
             return combos.Where(c => c.Count > 0).ToList();
         }
 
-
         #region https://stackoverflow.com/questions/4140719/calculate-median-in-c-sharp
+
         /// <summary>
-        /// Partitions the given list around a pivot element such that all elements on left of pivot are <= pivot
-        /// and the ones at thr right are > pivot. This method can be used for sorting, N-order statistics such as
+        /// Partitions the given list around a pivot element such that all elements on left of pivot are less than or equal to the pivot
+        /// and the ones at thr right are greater than the pivot. This method can be used for sorting, N-order statistics such as
         /// as median finding algorithms.
         /// Pivot is selected randomly if random number generator is supplied else its selected as last element in the list.
         /// Reference: Introduction to Algorithms 3rd Edition, Corman et al, pp 171
@@ -114,6 +110,7 @@ namespace CAVX.Bots.Framework.Extensions
         {
             return NthOrderStatistic(list, n, 0, list.Count - 1, rnd);
         }
+
         private static T NthOrderStatistic<T>(this IList<T> list, int n, int start, int end, Random rnd) where T : IComparable<T>
         {
             while (true)
@@ -151,6 +148,6 @@ namespace CAVX.Bots.Framework.Extensions
             return list.NthOrderStatistic(mid);
         }
 
-        #endregion
+        #endregion https://stackoverflow.com/questions/4140719/calculate-median-in-c-sharp
     }
 }

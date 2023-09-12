@@ -1,10 +1,5 @@
 ﻿using Discord;
 using Discord.WebSocket;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Extensions
 {
@@ -22,9 +17,13 @@ namespace CAVX.Bots.Framework.Extensions
         {
             //Only mods can view private threads.
             if (threadChannel.IsPrivateThread)
+            {
                 return ThreadChannelRoleAccess.Private;
+            }
             else if (role == null)
+            {
                 return ThreadChannelRoleAccess.PossibleAccess;
+            }
             else
             {
                 //First check if a channel is blocked to @everyone, because that makes it "private".

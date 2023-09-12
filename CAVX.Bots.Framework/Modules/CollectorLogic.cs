@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using CAVX.Bots.Framework.Models;
+﻿using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Services;
 using CAVX.Bots.Framework.Utilities;
 using Discord;
+using System;
+using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Modules
 {
@@ -20,20 +17,23 @@ namespace CAVX.Bots.Framework.Modules
 
     public class CollectorLogic : ICollectorLogic
     {
-        SemaphoreLocker _resultLock = new();
-        bool _enabled = true;
-        Func<IUser, ulong, object[], object[], Task<(MessageResultCode Result, string FailureMessage, IMessageBuilder MessageBuilder)>> _execute;
+        private readonly SemaphoreLocker _resultLock = new();
+        private bool _enabled = true;
+        private Func<IUser, ulong, object[], object[], Task<(MessageResultCode Result, string FailureMessage, IMessageBuilder MessageBuilder)>> _execute;
 
         public ulong MessageId { get; set; }
         public ulong? OriginalUserId { get; set; }
         public bool OnlyOriginalUserAllowed { get; set; }
+
         public Func<IUser, ulong, object[], object[], Task<(MessageResultCode Result, string FailureMessage, IMessageBuilder MessageBuilder)>> Execute
         {
             get => _execute;
             set
             {
                 if (value == null)
+                {
                     _execute = null;
+                }
                 else
                 {
                     _execute = async (userData, messageId, idOptions, selectOptions) =>

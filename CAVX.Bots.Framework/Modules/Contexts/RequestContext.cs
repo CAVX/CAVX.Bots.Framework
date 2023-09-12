@@ -1,26 +1,25 @@
-﻿using Discord;
+﻿using AsyncKeyedLock;
+using CAVX.Bots.Framework.Extensions;
+using CAVX.Bots.Framework.Models;
+using CAVX.Bots.Framework.Utilities;
+using Discord;
 using Discord.Rest;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using CAVX.Bots.Framework.Services;
-using CAVX.Bots.Framework.Models;
-using CAVX.Bots.Framework.Utilities;
-using CAVX.Bots.Framework.Extensions;
-using System.Linq;
-using AsyncKeyedLock;
 
 namespace CAVX.Bots.Framework.Modules.Contexts
 {
     public abstract class RequestContext
     {
-        protected readonly static SemaphoreLocker _sendMessageQueueLock = new();
+        protected static readonly SemaphoreLocker _sendMessageQueueLock = new();
 
-        readonly SemaphoreLocker _initialLock = new();
+        private readonly SemaphoreLocker _initialLock = new();
 
         private bool _initial = true;
+
         public async Task<bool> GetInitialAsync(bool updateAfterTouch)
         {
             return await _initialLock.LockAsync(() =>
@@ -34,6 +33,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
         }
 
         private ulong? _botOwnerId;
+
         public async Task<ulong> GetBotOwnerIdAsync()
         {
             if (_botOwnerId.HasValue)
@@ -44,7 +44,6 @@ namespace CAVX.Bots.Framework.Modules.Contexts
             return _botOwnerId.Value;
         }
 
-
         public abstract DiscordSocketClient Client { get; }
         public abstract SocketGuild Guild { get; }
         public abstract ISocketMessageChannel Channel { get; }
@@ -53,17 +52,18 @@ namespace CAVX.Bots.Framework.Modules.Contexts
 
         public ulong? GetReferenceMessageId() => Message?.Id;
 
-        public Task<RestUserMessage> ReplyAsync(bool ephemeral, string message = null, bool isTTS = false, FileAttachment[] attachments = null, Embed[] embeds = null, Embed embed = null,
+        public Task<RestUserMessage> ReplyAsync(bool ephemeral, string message = null, bool isTts = false, FileAttachment[] attachments = null, Embed[] embeds = null, Embed embed = null,
             RequestOptions options = null, AllowedMentions allowedMentions = null, MessageReference messageReference = null, MessageComponent components = null, bool hasMentions = false)
-            => ReplyAsync(ephemeral ? EphemeralRule.EphemeralOrFallback : EphemeralRule.Permanent, message, isTTS, attachments, embeds, embed, options, allowedMentions, messageReference, components, hasMentions);
+            => ReplyAsync(ephemeral ? EphemeralRule.EphemeralOrFallback : EphemeralRule.Permanent, message, isTts, attachments, embeds, embed, options, allowedMentions, messageReference, components, hasMentions);
 
-        public abstract Task<RestUserMessage> ReplyAsync(EphemeralRule ephemeralRule, string message = null, bool isTTS = false, FileAttachment[] attachments = null, Embed[] embeds = null, Embed embed = null,
+        public abstract Task<RestUserMessage> ReplyAsync(EphemeralRule ephemeralRule, string message = null, bool isTts = false, FileAttachment[] attachments = null, Embed[] embeds = null, Embed embed = null,
             RequestOptions options = null, AllowedMentions allowedMentions = null, MessageReference messageReference = null, MessageComponent components = null, bool hasMentions = false);
 
         public abstract Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null);
 
         public Task ReplyBuilderAsync(IServiceScopeFactory scopeFactory, IMessageBuilder messageBuilder, bool ephemeral, IContextMetadata contextMetadata, ulong? referenceMessageId = null)
             => ReplyBuilderAsync(scopeFactory, messageBuilder, ephemeral ? EphemeralRule.EphemeralOrFallback : EphemeralRule.Permanent, contextMetadata, referenceMessageId);
+
         public async Task ReplyBuilderAsync(IServiceScopeFactory scopeFactory, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, IContextMetadata contextMetadata, ulong? referenceMessageId = null)
         {
             var messageData = messageBuilder.BuildOutput();
@@ -73,20 +73,20 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                 ephemeralRule = messageBuilder.Result != MessageResultCode.Success && ephemeralRule == EphemeralRule.Permanent ? EphemeralRule.EphemeralOrFallback : ephemeralRule;
 
                 byte[] streamBytes = messageData.ImageStreamBytes;
-                using Stream stream = streamBytes == null ? null : new MemoryStream(streamBytes);
+                await using Stream stream = streamBytes == null ? null : new MemoryStream(streamBytes);
 
                 //Getting several messages from the framework - this is my super hacky way around them.
                 RestUserMessage message = null;
                 int errorCount = 0;
-                while (errorCount <= 1)
+                while (true)
                 {
                     try
                     {
                         FileAttachment[] attachments = stream == null ? null
                             : new FileAttachment[] { new(stream, messageData.ImageFileName, isSpoiler: messageData.ImageIsSpoiler) };
 
-                        message = await ReplyAsync(ephemeralRule, messageData.Message, attachments: attachments, embeds: messageData.Embeds, components: messageData.Components,
-                            messageReference: referenceMessageId.HasValue ? new MessageReference(referenceMessageId.Value) : null, hasMentions: messageData.HasMentions).ConfigureAwait(false);
+                        message = await ReplyAsync(ephemeralRule, messageData.Message, attachments: attachments, embeds: messageData.Embeds, messageReference: referenceMessageId.HasValue ? new MessageReference(referenceMessageId.Value) : null,
+                            components: messageData.Components, hasMentions: messageData.HasMentions).ConfigureAwait(false);
 
                         break;
                     }
@@ -100,7 +100,7 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                     }
                     catch (System.Net.Http.HttpRequestException hre)
                     {
-                        if (hre.InnerException == null || hre.InnerException is not IOException)
+                        if (hre.InnerException is not IOException)
                             break;
 
                         errorCount++;
@@ -119,20 +119,17 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                         {
                             var scope = scopeFactory.CreateScope();
                             var builderInstance = ActivatorUtilities.CreateInstance(scope.ServiceProvider, messageBuilder.DeferredBuilder.InstanceType);
-                            if (builderInstance != null)
+                            messageBuilder.DeferredBuilder.SetInstanceAndProperties(builderInstance, contextMetadata, message);
+                            await messageBuilder.DeferredBuilder.PreprocessAsync();
+                            if (contextMetadata?.UseQueue == true)
                             {
-                                messageBuilder.DeferredBuilder.SetInstanceAndProperties(builderInstance, contextMetadata, message);
-                                await messageBuilder.DeferredBuilder.PreprocessAsync();
-                                if (contextMetadata != null && contextMetadata.UseQueue)
-                                {
-                                    var asyncKeyedLocker = scope.ServiceProvider.GetRequiredService<AsyncKeyedLocker<ulong>>();
-                                    using (await asyncKeyedLocker.LockAsync(Guild.Id))
-                                        await SendDeferredMessage(scopeFactory, messageBuilder, ephemeralRule, contextMetadata, message);
-                                }
-                                else
-                                {
+                                var asyncKeyedLocker = scope.ServiceProvider.GetRequiredService<AsyncKeyedLocker<ulong>>();
+                                using (await asyncKeyedLocker.LockAsync(Guild.Id))
                                     await SendDeferredMessage(scopeFactory, messageBuilder, ephemeralRule, contextMetadata, message);
-                                }
+                            }
+                            else
+                            {
+                                await SendDeferredMessage(scopeFactory, messageBuilder, ephemeralRule, contextMetadata, message);
                             }
                         }
                         catch (Exception e)
@@ -140,19 +137,18 @@ namespace CAVX.Bots.Framework.Modules.Contexts
                             Console.WriteLine(e);
                             await ReplyAsync(ephemeralRule, "Something went wrong!").ConfigureAwait(false);
                             await Logger.Instance.LogErrorAsync(this, "Inner execution exception", e);
-                            return;
                         }
                     });
                 }
             }
+        }
 
-            async Task SendDeferredMessage(IServiceScopeFactory scopeFactory, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, IContextMetadata contextMetadata, RestUserMessage message)
+        private async Task SendDeferredMessage(IServiceScopeFactory scopeFactory, IMessageBuilder messageBuilder, EphemeralRule ephemeralRule, IContextMetadata contextMetadata, RestUserMessage message)
+        {
+            var innerBuilder = await messageBuilder.DeferredBuilder.GetDeferredMessageAsync();
+            if (innerBuilder != null)
             {
-                var innerBuilder = await messageBuilder.DeferredBuilder.GetDeferredMessageAsync();
-                if (innerBuilder != null)
-                {
-                    await ReplyBuilderAsync(scopeFactory, innerBuilder, ephemeralRule, contextMetadata, message?.Id);
-                }
+                await ReplyBuilderAsync(scopeFactory, innerBuilder, ephemeralRule, contextMetadata, message?.Id);
             }
         }
     }

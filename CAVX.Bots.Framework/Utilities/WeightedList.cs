@@ -1,33 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Utilities
 {
     public class WeightedList<T>
     {
-        private class SortingNode
+        private sealed class SortingNode(int weight, T value, int totalWeight)
         {
-            public int Weight { get; set; }
-            public T Value { get; set; }
-            public int TotalWeight { get; set; }
-
-            public SortingNode(int weight, T value, int totalWeight)
-            {
-                Weight = weight;
-                Value = value;
-                TotalWeight = totalWeight;
-            }
+            public int Weight { get; set; } = weight;
+            public T Value { get; } = value;
+            public int TotalWeight { get; set; } = totalWeight;
         }
 
         private readonly List<SortingNode> _list;
 
         public WeightedList(IEnumerable<T> items, Func<T, int> weightSelector)
         {
-            _list = new();
-            _list.Add(null);
+            _list = new() { null };
 
             foreach (T item in items)
             {
@@ -57,7 +46,7 @@ namespace CAVX.Bots.Framework.Utilities
                 if (randomWeight >= _list[i].TotalWeight)
                 {
                     randomWeight -= _list[i].TotalWeight;
-                    i += 1;
+                    i++;
 
                     if (_list.Count <= i)
                         return (false, default);

@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Extensions
 {
@@ -12,10 +9,8 @@ namespace CAVX.Bots.Framework.Extensions
         {
             var parameterProperties = enumValue.GetType().GetMember(enumValue.ToString()).SelectMany(m => m.GetCustomAttributes(false).OfType<T>());
 
-            if (parameterProperties == null || !parameterProperties.Any())
-                return null;
-
-            return parameterProperties.FirstOrDefault();
+            var properties = parameterProperties as T[] ?? parameterProperties.ToArray();
+            return !properties.Any() ? null : properties.FirstOrDefault();
         }
     }
 }

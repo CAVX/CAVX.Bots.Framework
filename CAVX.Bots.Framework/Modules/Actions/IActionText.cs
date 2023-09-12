@@ -1,8 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using Discord.Commands.Builders;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using Discord.Commands.Builders;
-using Discord.WebSocket;
 
 namespace CAVX.Bots.Framework.Modules.Actions
 {
@@ -18,6 +17,6 @@ namespace CAVX.Bots.Framework.Modules.Actions
 
     public interface IActionTextModifyBuilder : IActionText
     {
-        Task ModifyBuilderAsync(IServiceProvider services, CommandBuilder builder);
+        void ModifyBuilder(IServiceProvider services, CommandBuilder builder);
     }
 }

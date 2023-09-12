@@ -1,7 +1,6 @@
 ﻿using Discord;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -15,12 +14,15 @@ namespace CAVX.Bots.Framework.Extensions
             if (content.Length > 1024)
             {
                 tooLong = true;
-                content = content.Substring(0, 1021) + "...";
+                content = string.Concat(content.AsSpan(0, 1021), "...");
             }
 
-            fieldEmbed.Add(new EmbedFieldBuilder()
+            if (name != null && tooLong && appendIfTooLong)
+                name += " (truncated)";
+
+            fieldEmbed.Add(new EmbedFieldBuilder
             {
-                Name = name == null ? null : name + (appendIfTooLong && tooLong ? $" (truncated)" : ""),
+                Name = name,
                 Value = content,
                 IsInline = isInline
             });
@@ -46,9 +48,15 @@ namespace CAVX.Bots.Framework.Extensions
                 rowsUsed++;
             }
 
-            fieldEmbed.Add(new EmbedFieldBuilder()
+            if (!rows.TryGetNonEnumeratedCount(out var rowCount))
+                rowCount = rows.Count();
+
+            if (name != null && tooLong && appendIfTooLong)
+                name += $" (+ {rowCount - rowsUsed} more)";
+
+            fieldEmbed.Add(new EmbedFieldBuilder
             {
-                Name = name == null ? null : name + (appendIfTooLong && tooLong ? $" (+ {rows.Count() - rowsUsed} more)" : ""),
+                Name = name,
                 Value = sb.ToString(),
                 IsInline = isInline
             });

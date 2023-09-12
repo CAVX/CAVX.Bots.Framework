@@ -1,24 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using CAVX.Bots.Framework.Utilities;
 
 namespace CAVX.Bots.Framework.Extensions
 {
     public static class CollectionExtensions
     {
-        public static bool ExistsWithItems<T>(this IEnumerable<T> list) => list != null && list.Any();
+        public static bool ExistsWithItems<T>(this IEnumerable<T> list) => list?.Any() == true;
 
         public static T RandomElement<T>(this IEnumerable<T> sequence, Random random = null)
         {
-            var count = sequence.Count();
-            if (count == 0)
-                return default;
-            else if (count == 1)
-                return sequence.First();
-
-            return sequence.ElementAt((random ?? Random.Shared).Next(0, count));
+            var enumerable = sequence.ToArray();
+            var count = enumerable.Length;
+            return count switch
+            {
+                0 => default,
+                1 => enumerable[0],
+                _ => enumerable[(random ?? Random.Shared).Next(0, count)]
+            };
         }
 
         public static T RandomElement<T>(this T[] array, Random random = null)
@@ -28,13 +27,16 @@ namespace CAVX.Bots.Framework.Extensions
 
         public static T RandomElementByWeight<T>(this IEnumerable<T> sequence, Func<T, int> weightSelector, Random random = null)
         {
-            var count = sequence.Count();
-            if (count == 0)
-                return default;
-            else if (count == 1)
-                return sequence.First();
+            var enumerable = sequence as T[] ?? sequence.ToArray();
+            switch (enumerable.Length)
+            {
+                case 0:
+                    return default;
+                case 1:
+                    return enumerable[0];
+            }
 
-            var weightedItems = (from weightedItem in sequence select new { Value = weightedItem, Weight = weightSelector(weightedItem) }).ToList();
+            var weightedItems = (from weightedItem in enumerable select new { Value = weightedItem, Weight = weightSelector(weightedItem) }).ToList();
 
             int totalWeight = weightedItems.Sum(i => i.Weight);
             // The weight we are after...
@@ -51,7 +53,6 @@ namespace CAVX.Bots.Framework.Extensions
             }
 
             return default;
-
         }
     }
 }

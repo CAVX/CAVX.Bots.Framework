@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace CAVX.Bots.Framework.Models
+﻿namespace CAVX.Bots.Framework.Models
 {
     public enum EphemeralRule
     {
@@ -12,6 +6,7 @@ namespace CAVX.Bots.Framework.Models
         EphemeralOrFallback,
         Permanent
     }
+
     public static class EphemeralRuleExtensions
     {
         public static bool ToEphemeral(this EphemeralRule action)

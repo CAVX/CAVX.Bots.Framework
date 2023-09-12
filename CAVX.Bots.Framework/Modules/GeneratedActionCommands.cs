@@ -1,24 +1,16 @@
-﻿using Discord;
-using Discord.Commands;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
-using CAVX.Bots.Framework.Services;
-using System.IO;
-using System.Linq;
-using System.Text.RegularExpressions;
-using System.Security.Authentication.ExtendedProtection;
-using Discord.WebSocket;
-using Microsoft.Extensions.DependencyInjection;
-using CAVX.Bots.Framework.Processing;
-using CAVX.Bots.Framework.Modules.Attributes;
-using Discord.Rest;
-using Discord.Commands.Builders;
+﻿using AsyncKeyedLock;
 using CAVX.Bots.Framework.Modules.Actions;
-using CAVX.Bots.Framework.Modules.Contexts;
 using CAVX.Bots.Framework.Modules.Actions.Attributes;
-using AsyncKeyedLock;
+using CAVX.Bots.Framework.Modules.Attributes;
+using CAVX.Bots.Framework.Modules.Contexts;
+using CAVX.Bots.Framework.Processing;
+using CAVX.Bots.Framework.Services;
+using Discord.Commands;
+using Discord.Commands.Builders;
+using Microsoft.Extensions.DependencyInjection;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Modules
 {
@@ -27,59 +19,57 @@ namespace CAVX.Bots.Framework.Modules
     {
         // DI Services
         public ActionService ActionService { get; set; }
+
         public IServiceProvider ServiceProvider { get; set; }
 
         protected override void OnModuleBuilding(CommandService commandService, ModuleBuilder builder)
         {
             base.OnModuleBuilding(commandService, builder);
 
-            using var scope = ServiceProvider.CreateScope();
-
             //Get phrases from items as aliases for the referenced command.
             foreach (var action in ActionService.GetAll().OfType<IActionText>())
             {
                 builder.AddCommand(action.CommandName, RunActionFromTextCommand,
-                    async builder =>
+                    commandBuilder =>
                     {
+                        using var scope = ServiceProvider.CreateScope();
+
                         if (action.CommandAliases != null)
-                            builder.AddAliases(action.CommandAliases.ToArray());
-                        builder.Summary = action.CommandHelpSummary;
+                            commandBuilder.AddAliases(action.CommandAliases.ToArray());
+                        commandBuilder.Summary = action.CommandHelpSummary;
                         if (action.RestrictAccessToGuilds)
-                            builder.AddPrecondition(new RequireContextAttribute(ContextType.Guild));
+                            commandBuilder.AddPrecondition(new RequireContextAttribute(ContextType.Guild));
                         if (action.RequiredAccessRule != null)
                         {
                             if (action.RequiredAccessRule.PermissionType == Models.ActionPermissionType.RequireOwner)
-                                builder.AddPrecondition(new RequireOwnerAttribute());
+                                commandBuilder.AddPrecondition(new RequireOwnerAttribute());
                             else if (action.RequiredAccessRule.PermissionType == Models.ActionPermissionType.RequirePermission && action.RequiredAccessRule.RequiredPermission.HasValue)
-                                builder.AddPrecondition(new RequireUserPermissionAttribute(action.RequiredAccessRule.RequiredPermission.Value));
+                                commandBuilder.AddPrecondition(new RequireUserPermissionAttribute(action.RequiredAccessRule.RequiredPermission.Value));
                         }
                         if (action.TextParserPriority.HasValue)
-                            builder.Priority = action.TextParserPriority.Value;
+                            commandBuilder.Priority = action.TextParserPriority.Value;
 
-                        var parameters = action.GetParameters<ActionParameterTextAttribute>()?.OrderBy(p => p.Attribute.Order);
-                        if (parameters != null)
+                        var parameters = action.GetParameters<ActionParameterTextAttribute>().OrderBy(p => p.Attribute.Order);
+                        foreach (var attribute in parameters.Select(p => p.Attribute))
                         {
-                            foreach (var p in parameters)
+                            commandBuilder.AddParameter(attribute.Name, attribute.ParameterType, pb =>
                             {
-                                builder.AddParameter(p.Attribute.Name, p.Attribute.ParameterType, pb =>
-                                {
-                                    pb.Summary = p.Attribute.Description;
-                                    pb.IsMultiple = p.Attribute.IsMultiple;
-                                    pb.IsRemainder = p.Attribute.IsRemainder;
-                                    pb.DefaultValue = p.Attribute.DefaultValue;
-                                    pb.IsOptional = !p.Attribute.Required;
-                                });
-                            }
+                                pb.Summary = attribute.Description;
+                                pb.IsMultiple = attribute.IsMultiple;
+                                pb.IsRemainder = attribute.IsRemainder;
+                                pb.DefaultValue = attribute.DefaultValue;
+                                pb.IsOptional = !attribute.Required;
+                            });
                         }
 
                         if (action is IActionTextModifyBuilder mbAction)
-                            await mbAction.ModifyBuilderAsync(scope.ServiceProvider, builder);
+                            mbAction.ModifyBuilder(scope.ServiceProvider, commandBuilder);
                     }
                 );
             }
         }
 
-        public Task RunActionFromTextCommand(ICommandContext commandContext, object[] parmValues, IServiceProvider services, CommandInfo commandInfo)
+        public static Task RunActionFromTextCommand(ICommandContext commandContext, object[] parmValues, IServiceProvider services, CommandInfo commandInfo)
         {
             var actionService = services.GetRequiredService<ActionService>();
             var asyncKeyedLocker = services.GetRequiredService<AsyncKeyedLocker<ulong>>();

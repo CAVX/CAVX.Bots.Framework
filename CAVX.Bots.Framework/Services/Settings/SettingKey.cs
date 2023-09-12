@@ -15,7 +15,9 @@
     //This is typed so the explicit type can come back from the lists. There's a base class so that the key can be held in the list.
     public class SettingKey<T> : SettingKey
     {
-        protected SettingKey(string Name) : base(Name) { }
+        protected SettingKey(string name) : base(name)
+        {
+        }
 
         public static implicit operator SettingKey<T>(string s) => new(s);
     }

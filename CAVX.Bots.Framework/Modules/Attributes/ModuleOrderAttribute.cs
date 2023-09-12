@@ -1,17 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace CAVX.Bots.Framework.Modules.Attributes
 {
-    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
-    public class ModuleOrderAttribute : Attribute
+    [AttributeUsage(AttributeTargets.Class)]
+    public class ModuleOrderAttribute(int order) : Attribute
     {
-        public ModuleOrderAttribute(int order)
-        {
-            Order = order;
-        }
-
-        public int Order { get; set; }
+        public int Order { get; set; } = order;
     }
 }

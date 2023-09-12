@@ -1,9 +1,9 @@
-﻿using Discord.WebSocket;
-using System.Collections.Generic;
+﻿using CAVX.Bots.Framework.Modules.Actions.Attributes;
+using Discord.WebSocket;
 using System;
-using System.Threading.Tasks;
-using CAVX.Bots.Framework.Modules.Actions.Attributes;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Modules.Actions
 {
@@ -28,10 +28,8 @@ namespace CAVX.Bots.Framework.Modules.Actions
                 if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>).GetGenericTypeDefinition())
                     type = Nullable.GetUnderlyingType(type);
 
-                ActionParameterSlashAttribute parameter = action.GetType().GetProperty(propertyName)?.GetCustomAttributes(false).OfType<ActionParameterSlashAttribute>().FirstOrDefault();
-
-                if (parameter == null)
-                    throw new MissingFieldException($"The {propertyName} property was not found or does not contain the {nameof(ActionParameterSlashAttribute)}.");
+                ActionParameterSlashAttribute parameter = (action.GetType().GetProperty(propertyName)?.GetCustomAttributes(false).OfType<ActionParameterSlashAttribute>().FirstOrDefault())
+                    ?? throw new MissingFieldException($"The {propertyName} property was not found or does not contain the {nameof(ActionParameterSlashAttribute)}.");
 
                 var option = options.FirstOrDefault(t => t.Name == parameter.Name);
                 object val = option?.Value;
@@ -39,13 +37,13 @@ namespace CAVX.Bots.Framework.Modules.Actions
                     return default;
 
                 TCast ret;
-                if (val is IConvertible)
+                if (val is IConvertible && type != null)
                     ret = (TCast)Convert.ChangeType(val, type);
                 else
-                    ret = (TCast)(val ?? default);
+                    ret = (TCast)val;
 
                 if (typeof(TCast) == typeof(string))
-                    ret = (TCast)Convert.ChangeType(ret.ToString()?.Trim(), type);
+                    ret = (TCast)Convert.ChangeType(ret.ToString()?.Trim(), typeof(string));
 
                 return ret;
             }

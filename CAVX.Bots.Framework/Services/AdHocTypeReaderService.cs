@@ -5,25 +5,16 @@ using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Services
 {
-    public class AdHocTypeReaderService : IDisposable
+    public class AdHocTypeReaderService(IServiceProvider services)
     {
-        private readonly IServiceProvider _services;
-
-        public AdHocTypeReaderService(IServiceProvider services)
+        public void Initialize()
         {
-            _services = services;
+            //Nothing to initialize.
         }
-
-        public void Initialize() { }
 
         public async Task<T2> BestMatchOrDefaultAsync<T, T2>(RequestContext context, string input) where T : InteractionTypeReader<T2>, new() where T2 : class
         {
-            return await new T().BestMatchOrDefaultAsync(context, input, _services);
-        }
-
-        public void Dispose()
-        {
-            GC.SuppressFinalize(this);
+            return await new T().BestMatchOrDefaultAsync(context, input, services);
         }
     }
 }
