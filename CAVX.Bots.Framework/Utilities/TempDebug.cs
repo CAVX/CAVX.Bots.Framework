@@ -1,4 +1,6 @@
-﻿namespace CAVX.Bots.Framework.Utilities
+﻿using System;
+
+namespace CAVX.Bots.Framework.Utilities
 {
     public static class TempDebug
     {

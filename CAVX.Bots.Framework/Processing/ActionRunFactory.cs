@@ -207,7 +207,7 @@ namespace CAVX.Bots.Framework.Processing
 
         protected override async Task PopulateParametersAsync(IActionSlash action)
         {
-            await action.FillSlashParametersAsync(_subOptions ?? _interaction.Data.Options);
+            await action.FillSlashParametersAsync((_subOptions ?? _interaction.Data.Options).ToArray());
         }
     }
 

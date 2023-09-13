@@ -6,7 +6,16 @@ namespace CAVX.Bots.Framework.Extensions
 {
     public static class CollectionExtensions
     {
-        public static bool ExistsWithItems<T>(this IEnumerable<T> list) => list?.Any() == true;
+        public static bool ExistsWithItems<T>(this IEnumerable<T> enumerable)
+        {
+            if (enumerable == null)
+                return false;
+
+            if (enumerable.TryGetNonEnumeratedCount(out int count))
+                return count > 0;
+
+            return enumerable.Any();
+        }
 
         public static T RandomElement<T>(this IEnumerable<T> sequence, Random random = null)
         {

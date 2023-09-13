@@ -9,7 +9,7 @@ namespace CAVX.Bots.Framework.Modules.Actions
 {
     public interface IActionSlash : IBotAction, IActionSlashRoot
     {
-        Task FillSlashParametersAsync(IEnumerable<SocketSlashCommandDataOption> options);
+        Task FillSlashParametersAsync(SocketSlashCommandDataOption[] options);
     }
 
     public static class IActionSlashExtensions
