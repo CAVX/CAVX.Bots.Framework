@@ -1,9 +1,8 @@
-﻿namespace CAVX.Bots.Framework.Modules.Contexts
+﻿namespace CAVX.Bots.Framework.Modules.Contexts;
+
+public interface IContextMetadata
 {
-    public interface IContextMetadata
-    {
-        RequestContext Context { get; set; }
-        bool UseQueue { get; }
-        bool SkipDefer { get; }
-    }
+    RequestContext Context { get; set; }
+    bool UseQueue { get; }
+    bool SkipDefer { get; }
 }

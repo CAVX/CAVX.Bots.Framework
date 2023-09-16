@@ -6,24 +6,23 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
 
-namespace CAVX.Bots.Framework.Modules.Actions
+namespace CAVX.Bots.Framework.Modules.Actions;
+
+public interface IBotAction : IContextMetadata, IRequiredAccessRule
 {
-    public interface IBotAction : IContextMetadata, IRequiredAccessRule
-    {
-        EphemeralRule EphemeralRule { get; }
-        bool RestrictAccessToGuilds { get; }
-        bool ConditionalGuildsOnly { get; }
+    EphemeralRule EphemeralRule { get; }
+    bool RestrictAccessToGuilds { get; }
+    bool ConditionalGuildsOnly { get; }
 
-        Task<(bool Success, string Message)> CheckPreconditionsAsync(ActionRunContext runContext);
+    Task<(bool Success, string Message)> CheckPreconditionsAsync(ActionRunContext runContext);
 
-        IEnumerable<(PropertyInfo Property, T Attribute)> GetParameters<T>() where T : IActionParameterAttribute;
+    IEnumerable<(PropertyInfo Property, T Attribute)> GetParameters<T>() where T : IActionParameterAttribute;
 
-        void Initialize(RequestContext context);
+    void Initialize(RequestContext context);
 
-        (bool Success, string Message) IsCommandAllowedInGuild();
+    (bool Success, string Message) IsCommandAllowedInGuild();
 
-        Task RunAsync(ActionRunContext runContext);
+    Task RunAsync(ActionRunContext runContext);
 
-        bool ValidateParameters<T>() where T : IActionParameterAttribute;
-    }
+    bool ValidateParameters<T>() where T : IActionParameterAttribute;
 }

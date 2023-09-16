@@ -1,9 +1,8 @@
 ﻿using CAVX.Bots.Framework.Models;
 
-namespace CAVX.Bots.Framework.Modules.Actions
+namespace CAVX.Bots.Framework.Modules.Actions;
+
+public interface IRequiredAccessRule
 {
-    public interface IRequiredAccessRule
-    {
-        ActionAccessRule RequiredAccessRule { get; }
-    }
+    ActionAccessRule RequiredAccessRule { get; }
 }

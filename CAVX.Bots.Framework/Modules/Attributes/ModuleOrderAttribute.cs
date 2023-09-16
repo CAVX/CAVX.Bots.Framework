@@ -1,10 +1,9 @@
 ﻿using System;
 
-namespace CAVX.Bots.Framework.Modules.Attributes
+namespace CAVX.Bots.Framework.Modules.Attributes;
+
+[AttributeUsage(AttributeTargets.Class)]
+public class ModuleOrderAttribute(int order) : Attribute
 {
-    [AttributeUsage(AttributeTargets.Class)]
-    public class ModuleOrderAttribute(int order) : Attribute
-    {
-        public int Order { get; set; } = order;
-    }
+    public int Order { get; set; } = order;
 }

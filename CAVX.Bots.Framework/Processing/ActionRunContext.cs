@@ -1,12 +1,11 @@
-﻿namespace CAVX.Bots.Framework.Processing
+﻿namespace CAVX.Bots.Framework.Processing;
+
+public enum ActionRunContext
 {
-    public enum ActionRunContext
-    {
-        None,
-        Slash,
-        Message,
-        User,
-        Component,
-        Text
-    }
+    None,
+    Slash,
+    Message,
+    User,
+    Component,
+    Text
 }

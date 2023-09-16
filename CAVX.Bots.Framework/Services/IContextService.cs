@@ -2,14 +2,13 @@
 using Discord.Commands;
 using Discord.WebSocket;
 
-namespace CAVX.Bots.Framework.Services
+namespace CAVX.Bots.Framework.Services;
+
+public interface IContextService : IContextMetadata
 {
-    public interface IContextService : IContextMetadata
-    {
-        void AddContext(IContextMetadata botActionMetadata);
+    void AddContext(IContextMetadata botActionMetadata);
 
-        void AddContext(SocketCommandContext context);
+    void AddContext(SocketCommandContext context);
 
-        void AddContext(SocketSlashCommand interaction, DiscordSocketClient client);
-    }
+    void AddContext(SocketSlashCommand interaction, DiscordSocketClient client);
 }

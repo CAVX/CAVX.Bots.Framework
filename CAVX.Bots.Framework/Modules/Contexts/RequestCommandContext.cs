@@ -8,40 +8,39 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace CAVX.Bots.Framework.Modules.Contexts
+namespace CAVX.Bots.Framework.Modules.Contexts;
+
+public class RequestCommandContext(SocketCommandContext context) : RequestContext
 {
-    public class RequestCommandContext(SocketCommandContext context) : RequestContext
+    public SocketCommandContext OriginalContext { get; } = context ?? throw new ArgumentNullException(nameof(context));
+
+    public override DiscordSocketClient Client => OriginalContext.Client;
+    public override SocketGuild Guild => OriginalContext.Guild;
+    public override ISocketMessageChannel Channel => OriginalContext.Channel;
+    public override SocketUser User => OriginalContext.User;
+    public override SocketUserMessage Message => OriginalContext.Message;
+
+    public override async Task<RestUserMessage> ReplyAsync(EphemeralRule ephemeralRule, string message = null, bool isTts = false, FileAttachment[] attachments = null,
+        Embed[] embeds = null, Embed embed = null, RequestOptions options = null, AllowedMentions allowedMentions = null, MessageReference messageReference = null,
+        MessageComponent components = null, bool hasMentions = false)
     {
-        public SocketCommandContext OriginalContext { get; } = context ?? throw new ArgumentNullException(nameof(context));
+        bool hasAttachments = attachments?.Any() == true;
 
-        public override DiscordSocketClient Client => OriginalContext.Client;
-        public override SocketGuild Guild => OriginalContext.Guild;
-        public override ISocketMessageChannel Channel => OriginalContext.Channel;
-        public override SocketUser User => OriginalContext.User;
-        public override SocketUserMessage Message => OriginalContext.Message;
+        await GetInitialAsync(true);
 
-        public override async Task<RestUserMessage> ReplyAsync(EphemeralRule ephemeralRule, string message = null, bool isTts = false, FileAttachment[] attachments = null,
-            Embed[] embeds = null, Embed embed = null, RequestOptions options = null, AllowedMentions allowedMentions = null, MessageReference messageReference = null,
-            MessageComponent components = null, bool hasMentions = false)
-        {
-            bool hasAttachments = attachments?.Any() == true;
+        if (!embeds.ExistsWithItems() && embed != null)
+            embeds = new[] { embed };
 
-            await GetInitialAsync(true);
+        return await _sendMessageQueueLock.LockAsync(async () =>
+            hasAttachments
+                ? await Channel.SendFilesAsync(attachments, message, isTts, null, options, allowedMentions, messageReference, components, embeds: embeds)
+                : await Channel.SendMessageAsync(message, isTts, null, options, allowedMentions, messageReference, components, embeds: embeds));
+    }
 
-            if (!embeds.ExistsWithItems() && embed != null)
-                embeds = new[] { embed };
-
-            return await _sendMessageQueueLock.LockAsync(async () =>
-                hasAttachments
-                    ? await Channel.SendFilesAsync(attachments, message, isTts, null, options, allowedMentions, messageReference, components, embeds: embeds)
-                    : await Channel.SendMessageAsync(message, isTts, null, options, allowedMentions, messageReference, components, embeds: embeds));
-        }
-
-        public override async Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null)
-        {
-            await GetInitialAsync(true);
-            if (OriginalContext.Message != null)
-                await OriginalContext.Message.ModifyAsync(propBuilder);
-        }
+    public override async Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null)
+    {
+        await GetInitialAsync(true);
+        if (OriginalContext.Message != null)
+            await OriginalContext.Message.ModifyAsync(propBuilder);
     }
 }

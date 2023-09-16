@@ -1,9 +1,8 @@
-﻿namespace CAVX.Bots.Framework.Models
+﻿namespace CAVX.Bots.Framework.Models;
+
+public enum MessageResultCode
 {
-    public enum MessageResultCode
-    {
-        Success,
-        PreconditionFailed,
-        ExecutionFailed
-    }
+    Success,
+    PreconditionFailed,
+    ExecutionFailed
 }

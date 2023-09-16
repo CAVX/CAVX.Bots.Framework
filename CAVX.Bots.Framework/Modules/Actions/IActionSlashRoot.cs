@@ -1,8 +1,7 @@
-﻿namespace CAVX.Bots.Framework.Modules.Actions
+﻿namespace CAVX.Bots.Framework.Modules.Actions;
+
+public interface IActionSlashRoot : IRequiredAccessRule
 {
-    public interface IActionSlashRoot : IRequiredAccessRule
-    {
-        string CommandDescription { get; }
-        string CommandName { get; }
-    }
+    string CommandDescription { get; }
+    string CommandName { get; }
 }

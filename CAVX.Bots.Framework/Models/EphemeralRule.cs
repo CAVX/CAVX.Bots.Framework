@@ -1,17 +1,16 @@
-﻿namespace CAVX.Bots.Framework.Models
-{
-    public enum EphemeralRule
-    {
-        EphemeralOrFail,
-        EphemeralOrFallback,
-        Permanent
-    }
+﻿namespace CAVX.Bots.Framework.Models;
 
-    public static class EphemeralRuleExtensions
+public enum EphemeralRule
+{
+    EphemeralOrFail,
+    EphemeralOrFallback,
+    Permanent
+}
+
+public static class EphemeralRuleExtensions
+{
+    public static bool ToEphemeral(this EphemeralRule action)
     {
-        public static bool ToEphemeral(this EphemeralRule action)
-        {
-            return action != EphemeralRule.Permanent;
-        }
+        return action != EphemeralRule.Permanent;
     }
 }

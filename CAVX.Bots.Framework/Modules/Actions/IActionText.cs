@@ -3,20 +3,19 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace CAVX.Bots.Framework.Modules.Actions
+namespace CAVX.Bots.Framework.Modules.Actions;
+
+public interface IActionText : IBotAction
 {
-    public interface IActionText : IBotAction
-    {
-        string CommandName { get; }
-        List<string> CommandAliases { get; }
-        string CommandHelpSummary { get; }
-        int? TextParserPriority { get; }
+    string CommandName { get; }
+    List<string> CommandAliases { get; }
+    string CommandHelpSummary { get; }
+    int? TextParserPriority { get; }
 
-        Task FillTextParametersAsync(object[] options);
-    }
+    Task FillTextParametersAsync(object[] options);
+}
 
-    public interface IActionTextModifyBuilder : IActionText
-    {
-        void ModifyBuilder(IServiceProvider services, CommandBuilder builder);
-    }
+public interface IActionTextModifyBuilder : IActionText
+{
+    void ModifyBuilder(IServiceProvider services, CommandBuilder builder);
 }
