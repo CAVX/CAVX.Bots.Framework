@@ -18,9 +18,7 @@ using CAVX.Bots.Framework.Processing;
 using CAVX.Bots.Framework.Models;
 using System.Collections.Concurrent;
 using CAVX.Bots.Framework.Modules;
-using static System.Collections.Specialized.BitVector32;
 using CAVX.Bots.Framework.Extensions;
-using ScottPlot.Styles;
 using AsyncKeyedLock;
 
 namespace CAVX.Bots.Framework.Services
@@ -94,7 +92,7 @@ namespace CAVX.Bots.Framework.Services
 
             var serverCommands = await _discord.Rest.GetGlobalApplicationCommands().ConfigureAwait(false);
             List<string> commandNames = new();
-            
+
             var slashChildActionGroups = allActions.OfType<IActionSlash>().OfType<IActionSlashChild>()
                 .Where(a => filterName is null || filterName == a.Parent.CommandName).GroupBy(a => a.Parent.CommandName);
 
