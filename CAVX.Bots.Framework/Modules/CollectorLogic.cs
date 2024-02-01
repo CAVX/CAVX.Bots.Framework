@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using AsyncKeyedLock;
 using CAVX.Bots.Framework.Models;
 using CAVX.Bots.Framework.Services;
-using CAVX.Bots.Framework.Utilities;
 using Discord;
+using System;
+using System.Threading.Tasks;
 
 namespace CAVX.Bots.Framework.Modules
 {
@@ -20,7 +17,7 @@ namespace CAVX.Bots.Framework.Modules
 
     public class CollectorLogic : ICollectorLogic
     {
-        SemaphoreLocker _resultLock = new();
+        AsyncNonKeyedLocker _resultLock = new();
         bool _enabled = true;
         Func<IUser, ulong, object[], object[], Task<(MessageResultCode Result, string FailureMessage, IMessageBuilder MessageBuilder)>> _execute;
 
@@ -38,13 +35,14 @@ namespace CAVX.Bots.Framework.Modules
                 {
                     _execute = async (userData, messageId, idOptions, selectOptions) =>
                     {
-                        return await _resultLock.LockAsync(async () =>
+                        using (await _resultLock.LockAsync())
                         {
                             if (_enabled)
                                 return await value(userData, messageId, idOptions, selectOptions);
 
                             return (MessageResultCode.ExecutionFailed, "Sorry! You were just too late!", null);
-                        });
+
+                        }
                     };
                 }
             }
@@ -59,12 +57,11 @@ namespace CAVX.Bots.Framework.Modules
             }
             finally
             {
-                await _resultLock.LockAsync(() =>
+                using (await _resultLock.LockAsync())
                 {
                     _enabled = false;
                     actionService.UnregisterCollector(this);
-                    return Task.CompletedTask;
-                });
+                }
             }
         }
     }

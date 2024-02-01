@@ -37,10 +37,12 @@ namespace CAVX.Bots.Framework.Modules.Contexts
             if (!embeds.ExistsWithItems() && embed != null)
                 embeds = new Embed[] { embed };
 
-            return await _sendMessageQueueLock.LockAsync(async () =>
-                hasAttachments
+            using (await _sendMessageQueueLock.LockAsync())
+            {
+                return hasAttachments
                     ? await Channel.SendFilesAsync(attachments, message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds) as RestUserMessage
-                    : await Channel.SendMessageAsync(message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds));
+                    : await Channel.SendMessageAsync(message, isTTS, null, options, allowedMentions, messageReference, components, embeds: embeds);
+            }
         }
 
         public override async Task UpdateReplyAsync(Action<MessageProperties> propBuilder, RequestOptions options = null)

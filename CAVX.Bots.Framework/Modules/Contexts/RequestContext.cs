@@ -16,21 +16,21 @@ namespace CAVX.Bots.Framework.Modules.Contexts
 {
     public abstract class RequestContext
     {
-        protected readonly static SemaphoreLocker _sendMessageQueueLock = new();
+        protected readonly static AsyncNonKeyedLocker _sendMessageQueueLock = new();
 
-        readonly SemaphoreLocker _initialLock = new();
+        readonly AsyncNonKeyedLocker _initialLock = new();
 
         private bool _initial = true;
         public async Task<bool> GetInitialAsync(bool updateAfterTouch)
         {
-            return await _initialLock.LockAsync(() =>
+            using (await _initialLock.LockAsync())
             {
                 bool val = _initial;
                 if (updateAfterTouch)
                     _initial = false;
 
-                return Task.FromResult(val);
-            });
+                return val;
+            }
         }
 
         private ulong? _botOwnerId;
